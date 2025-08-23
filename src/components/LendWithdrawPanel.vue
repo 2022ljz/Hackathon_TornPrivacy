@@ -66,7 +66,12 @@
       </div>
 
       <!-- Stats -->
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-3 gap-4">
+        <div class="stat-card">
+          <div class="text-sm text-mixer-muted mb-1">Local Balance</div>
+          <div v-if="walletStore.isConnected" class="font-mono text-lg text-blue-400">{{ formatNumber(walletStore.getLocalBalance(lendForm.token)) }} {{ lendForm.token }}</div>
+          <div v-else class="font-mono text-lg text-gray-500">Connect wallet first</div>
+        </div>
         <div class="stat-card">
           <div class="text-sm text-mixer-muted mb-1">Your balance</div>
           <div class="font-mono text-lg">{{ formatNumber(userBalance) }}</div>
@@ -166,7 +171,12 @@
       </div>
 
       <!-- Withdraw Stats -->
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-3 gap-4">
+        <div class="stat-card">
+          <div class="text-sm text-mixer-muted mb-1">Local Balance</div>
+          <div v-if="walletStore.isConnected" class="font-mono text-lg text-blue-400">{{ formatNumber(walletStore.getLocalBalance(withdrawInfo.token || 'ETH')) }} {{ withdrawInfo.token || 'ETH' }}</div>
+          <div v-else class="font-mono text-lg text-gray-500">Connect wallet first</div>
+        </div>
         <div class="stat-card">
           <div class="text-sm text-mixer-muted mb-1">Accrued Interest (est.)</div>
           <div class="font-mono text-lg text-green-400">{{ withdrawInfo.interest }}</div>
@@ -602,6 +612,9 @@ async function lend() {
     walletStore.persistData()
     console.log('💿 Data persisted to localStorage')
     
+    // 更新本地余额 - Lend操作减少可用余额
+    walletStore.handleLendOperation(token, amount)
+    
     // 验证数据是否正确保存
     const savedData = JSON.parse(localStorage.getItem("mixer-local") || '{}')
     console.log('✅ Verification - localStorage content:', savedData)
@@ -910,6 +923,11 @@ async function withdraw() {
     }
     
     walletStore.persistData()
+    
+    // 更新本地余额 - Withdraw操作增加可用余额（取回本金 + 利息）
+    const totalWithdrawAmount = amount + withdrawInterest
+    walletStore.handleWithdrawOperation(record.token, totalWithdrawAmount)
+    
     await updateBalance()
     
     notificationStore.success(

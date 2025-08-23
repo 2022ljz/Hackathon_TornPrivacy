@@ -230,22 +230,29 @@
         
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm text-mixer-muted mb-2">Token</label>
-            <select v-model="unstakeForm.token" class="tornado-input" disabled>
-              <option v-for="token in walletStore.config.tokens" :key="token.sym" :value="token.sym">
-                {{ token.sym }}
-              </option>
-            </select>
+            <label class="block text-sm text-mixer-muted mb-2">Borrowed Tokens (to repay)</label>
+            <div class="space-y-2">
+              <div v-if="borrowedTokensList.length === 0" class="tornado-input bg-gray-600 text-gray-400">
+                No borrowed tokens
+              </div>
+              <div v-else>
+                <div v-for="tokenInfo in borrowedTokensList" :key="tokenInfo.token" 
+                     class="tornado-input bg-red-900/20 border-red-500/30 text-red-200">
+                  {{ tokenInfo.token }}: {{ formatNumber(tokenInfo.amount, 6) }} 
+                  <span class="text-xs text-red-400">(+ interest)</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div>
-            <label class="block text-sm text-mixer-muted mb-2">Required Debt Repayment</label>
+            <label class="block text-sm text-mixer-muted mb-2">Collateral to Release</label>
             <input 
-              v-model="unstakeInfo.requiredAmount" 
+              v-model="unstakeInfo.collateralRelease" 
               class="tornado-input" 
               readonly
             />
             <div v-if="unstakeInfo.record" class="text-xs text-mixer-muted mt-1">
-              Must repay all borrowed amounts (see breakdown below)
+              Staked collateral that will be returned
             </div>
           </div>
         </div>
@@ -546,6 +553,35 @@ const borrowAmountExceeded = computed(() => {
   return amount > 0 && amount > remainingBorrowable && borrowInfo.value.noteStatus === 'Valid'
 })
 
+const borrowedTokensList = computed(() => {
+  const note = unstakeForm.value.note
+  if (!note || !walletStore.localData.stakeNotes) return []
+  
+  const record = walletStore.localData.stakeNotes[note]
+  if (!record || !record.borrows) return []
+  
+  const currentTime = now()
+  const borrowAPRValue = Number(walletStore.config.borrowAPR) || 8
+  
+  return Object.entries(record.borrows).map(([token, borrowData]) => {
+    const principal = borrowData.amount || 0
+    const borrowTime = borrowData.borrowTime || currentTime
+    const elapsedTime = currentTime - borrowTime
+    const days = elapsedTime / 86400
+    const daysForCalculation = Math.max(1, Math.ceil(days))
+    
+    const interest = principal * borrowAPRValue / 100 * (daysForCalculation / 365)
+    const totalAmount = principal + interest
+    
+    return {
+      token: token,
+      amount: totalAmount,
+      principal: principal,
+      interest: interest
+    }
+  })
+})
+
 const canUnstake = computed(() => {
   return unstakeForm.value.note && unstakeInfo.value.noteStatus === 'Valid' && !isUnstaking.value
 })
@@ -719,6 +755,10 @@ async function stake() {
     walletStore.localData.stakes[token] += amount
     
     walletStore.persistData()
+    
+    // 更新本地余额 - Stake操作减少可用余额
+    walletStore.handleStakeOperation(token, amount)
+    
     await updateStakeBalance()
     
     // 创建带有复制按钮的持久通知
@@ -823,6 +863,9 @@ async function borrow() {
     
     walletStore.persistData()
     
+    // 更新本地余额 - Borrow操作增加借来的代币余额
+    walletStore.handleBorrowOperation(token, amount)
+    
     // 更新借款币种的余额显示
     await updateBorrowBalance()
     
@@ -904,6 +947,31 @@ async function unstake() {
     }
     
     walletStore.persistData()
+    
+    // 更新本地余额 - Unstake操作
+    // 计算需要从每种借款代币中扣除的总额（本金+利息）
+    let totalBorrowTokensToDeduct = {}
+    if (record.borrows) {
+      for (const [borrowToken, borrowData] of Object.entries(record.borrows)) {
+        const principal = borrowData.amount || 0
+        const borrowTime = borrowData.borrowTime || currentTime
+        const elapsedTime = currentTime - borrowTime
+        const days = elapsedTime / 86400
+        const daysForCalculation = Math.max(0, days)
+        const dailyInterestRate = (Number(walletStore.config.borrowAPR) || 8) / 100 / 365
+        const interest = principal * dailyInterestRate * daysForCalculation
+        totalBorrowTokensToDeduct[borrowToken] = principal + interest
+      }
+    }
+    
+    // 执行balance更新
+    walletStore.handleUnstakeOperation(token, stakeAmount, null, 0)
+    
+    // 扣除债务（本金+利息）
+    for (const [borrowToken, debtAmount] of Object.entries(totalBorrowTokensToDeduct)) {
+      walletStore.updateBalance(borrowToken, debtAmount, 'subtract')
+    }
+    
     await updateStakeBalance()
     
     const debtSummary = debtDetails.length > 0 ? `\nRepaid debts: ${debtDetails.join(', ')}` : '\nNo outstanding debts'
