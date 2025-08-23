@@ -34,7 +34,13 @@ export const useWalletStore = defineStore('wallet', () => {
         stakes: {},
         borrows: {},
         notes: {},
-        stakeNotes: {}  // 新增stake notes存储
+        stakeNotes: {},  // 新增stake notes存储
+        balance: {
+            ETH: 1000,
+            DAI: 1000,
+            USDC: 1000,
+            WBTC: 1000
+        }
     })
 
     // ABIs
@@ -267,11 +273,35 @@ export const useWalletStore = defineStore('wallet', () => {
                 if (!parsed.notes) {
                     parsed.notes = {}
                 }
+                // 确保 balance 字段存在并初始化
+                if (!parsed.balance) {
+                    parsed.balance = {
+                        ETH: 1000,
+                        DAI: 1000,
+                        USDC: 1000,
+                        WBTC: 1000
+                    }
+                }
                 Object.assign(localData.value, parsed)
                 console.log('📂 Loaded persisted data:', localData.value)
+            } else {
+                // 如果没有保存的数据，初始化balance
+                localData.value.balance = {
+                    ETH: 1000,
+                    DAI: 1000,
+                    USDC: 1000,
+                    WBTC: 1000
+                }
             }
         } catch (error) {
             console.error("Failed to load persisted data:", error)
+            // 出错时也要初始化balance
+            localData.value.balance = {
+                ETH: 1000,
+                DAI: 1000,
+                USDC: 1000,
+                WBTC: 1000
+            }
         }
     }
 
@@ -299,7 +329,13 @@ export const useWalletStore = defineStore('wallet', () => {
                 stakes: {},
                 borrows: {},
                 notes: {},
-                stakeNotes: {}
+                stakeNotes: {},
+                balance: {
+                    ETH: 1000,
+                    DAI: 1000,
+                    USDC: 1000,
+                    WBTC: 1000
+                }
             }
 
             // 重置配置到默认值
@@ -322,6 +358,80 @@ export const useWalletStore = defineStore('wallet', () => {
         } catch (error) {
             console.error("❌ Failed to clear cache data:", error)
             return false
+        }
+    }
+
+    // Local balance management functions
+    function getLocalBalance(token) {
+        if (!localData.value.balance) {
+            // 初始化balance对象如果不存在
+            localData.value.balance = {
+                ETH: 1000,
+                DAI: 1000,
+                USDC: 1000,
+                WBTC: 1000
+            }
+        }
+        return localData.value.balance[token] || 0
+    }
+
+    function updateBalance(token, amount, operation = 'set') {
+        if (!localData.value.balance) {
+            localData.value.balance = {
+                ETH: 1000,
+                DAI: 1000,
+                USDC: 1000,
+                WBTC: 1000
+            }
+        }
+
+        const currentBalance = localData.value.balance[token] || 0
+
+        switch (operation) {
+            case 'add':
+                localData.value.balance[token] = currentBalance + amount
+                break
+            case 'subtract':
+                localData.value.balance[token] = Math.max(0, currentBalance - amount)
+                break
+            case 'set':
+            default:
+                localData.value.balance[token] = amount
+                break
+        }
+
+        // 持久化数据
+        persistData()
+
+        console.log(`💰 Balance updated: ${token} ${operation} ${amount}, new balance: ${localData.value.balance[token]}`)
+    }
+
+    // Balance operations for DeFi actions
+    function handleLendOperation(token, amount) {
+        // Lend: 减少可用余额（钱被放出借贷）
+        updateBalance(token, amount, 'subtract')
+    }
+
+    function handleWithdrawOperation(token, amount) {
+        // Withdraw: 增加可用余额（从借贷中取回钱）
+        updateBalance(token, amount, 'add')
+    }
+
+    function handleStakeOperation(token, amount) {
+        // Stake: 减少可用余额（钱被抵押）
+        updateBalance(token, amount, 'subtract')
+    }
+
+    function handleBorrowOperation(borrowToken, borrowAmount) {
+        // Borrow: 增加借来的代币余额
+        updateBalance(borrowToken, borrowAmount, 'add')
+    }
+
+    function handleUnstakeOperation(token, amount, borrowToken, borrowAmount) {
+        // Unstake: 增加抵押代币余额，减少借来的代币余额
+        updateBalance(token, amount, 'add')
+        if (borrowToken && borrowAmount > 0) {
+            updateBalance(borrowToken, borrowAmount, 'subtract')
         }
     }
 
@@ -348,6 +458,15 @@ export const useWalletStore = defineStore('wallet', () => {
         getBalance,
         loadPersistedData,
         persistData,
-        clearAllData
+        clearAllData,
+
+        // Balance management
+        getLocalBalance,
+        updateBalance,
+        handleLendOperation,
+        handleWithdrawOperation,
+        handleStakeOperation,
+        handleBorrowOperation,
+        handleUnstakeOperation
     }
 })

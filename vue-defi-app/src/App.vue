@@ -21,6 +21,9 @@
         <!-- Header -->
         <Header @open-config="isConfigOpen = true" />
         
+        <!-- Balance Panel -->
+        <BalancePanel class="mt-6" />
+        
         <!-- Main Interface -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <!-- Left Panel: Lend/Withdraw -->
@@ -50,6 +53,7 @@
 import { ref, onMounted } from 'vue'
 import { useWalletStore } from '@/stores/wallet'
 import Header from '@/components/Header.vue'
+import BalancePanel from '@/components/BalancePanel.vue'
 import LendWithdrawPanel from '@/components/LendWithdrawPanel.vue'
 import StakeBorrowPanel from '@/components/StakeBorrowPanel.vue'
 import MarketTable from '@/components/MarketTable.vue'
