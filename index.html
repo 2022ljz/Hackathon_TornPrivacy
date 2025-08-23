@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="zh">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mixer DeFi Desk — Lend · Borrow · Withdraw</title>
+    <!-- ethers v5 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0b0f12;
+            --panel: #10161b;
+            --panel-2: #0e1419;
+            --card: #0f1720;
+            --muted: #7a91a7;
+            --txt: #e7f1fb;
+            --accent: #68f6bf;
+            --accent-2: #5ae3ff;
+            --danger: #ff6b6b;
+            --warn: #ffd166;
+            --border: #15222c;
+            --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        html,
+        body {
+            height: 100%
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1200px 600px at 20% -10%, #10212b 0%, rgba(16, 22, 27, 0) 60%), var(--bg);
+            color: var(--txt);
+            font: 15px/1.4 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
+        }
+
+        a {
+            color: var(--accent-2);
+            text-decoration: none
+        }
+
+        .wrap {
+            max-width: 1200px;
+            margin: 24px auto;
+            padding: 0 16px
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            justify-content: space-between
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+        .brand .logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #00f5a0, #00d9f5);
+        }
+
+        .pill {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--muted);
+            background: linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(0, 0, 0, .35));
+            box-shadow: var(--shadow)
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 24px;
+            margin-top: 20px
+        }
+
+        @media (max-width:980px) {
+            .row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .015), rgba(0, 0, 0, .35)), var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: var(--shadow)
+        }
+
+        .h2 {
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: .4px;
+            margin: 0 0 14px
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px
+        }
+
+        .tab {
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            background: var(--panel-2)
+        }
+
+        .tab.active {
+            border-color: #224e3b;
+            color: #071;
+            background: linear-gradient(180deg, rgba(104, 246, 191, .20), rgba(104, 246, 191, .04)), #0b1511
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px
+        }
+
+        .input,
+        select {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #0c1217;
+            color: var(--txt);
+            outline: none
+        }
+
+        .input[readonly] {
+            opacity: .85
+        }
+
+        .btn {
+            cursor: pointer;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid #1f2d26;
+            background: linear-gradient(180deg, rgba(104, 246, 191, .18), rgba(104, 246, 191, .05));
+            color: #b9ffe2;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px
+        }
+
+        .btn.secondary {
+            border-color: #233346;
+            background: linear-gradient(180deg, rgba(90, 227, 255, .16), rgba(90, 227, 255, .05));
+            color: #c7f3ff
+        }
+
+        .btn.warn {
+            border-color: #3b2b14;
+            background: linear-gradient(180deg, rgba(255, 209, 102, .16), rgba(255, 209, 102, .05));
+            color: #ffe9b0
+        }
+
+        .btn:disabled {
+            opacity: .55;
+            cursor: not-allowed
+        }
+
+        .row-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin: 10px 0 2px
+        }
+
+        .chip {
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--muted);
+            cursor: pointer;
+            background: #0d1318
+        }
+
+        .chip.active {
+            border-color: #204a3a;
+            color: #9bfdd7;
+            background: #0e1915
+        }
+
+        .help {
+            color: var(--muted);
+            font-size: 12px
+        }
+
+        .stat-card {
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: #0c1217
+        }
+
+        .col2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px
+        }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #23313b, transparent);
+            margin: 16px 0
+        }
+
+        .market {
+            margin-top: 24px
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 8px
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #10202a
+        }
+
+        tr {
+            background: linear-gradient(180deg, rgba(255, 255, 255, .015), rgba(0, 0, 0, .25)), #0c1217
+        }
+
+        tr:hover {
+            background: #0f1820
+        }
+
+        th {
+            color: #93a9bd;
+            font-weight: 600;
+            text-align: left
+        }
+
+        .tag {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            color: #a9c7dc;
+            background: #0b1217
+        }
+
+        .right {
+            display: flex;
+            gap: 8px;
+            align-items: center
+        }
+
+        .ok {
+            color: #89ffcb
+        }
+
+        .bad {
+            color: var(--danger)
+        }
+
+        .muted {
+            color: var(--muted)
+        }
+
+        .footer {
+            color: #69829a;
+            margin: 22px 0 10px;
+            text-align: center;
+            font-size: 12px
+        }
+
+        /* Config Drawer */
+        .drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 380px;
+            max-width: 90vw;
+            height: 100%;
+            background: var(--panel);
+            border-left: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            transform: translateX(110%);
+            transition: .25s ease;
+            z-index: 50;
+            padding: 16px 16px 80px;
+            overflow: auto
+        }
+
+        .drawer.open {
+            transform: translateX(0)
+        }
+
+        .drawer h3 {
+            margin: 8px 0 10px
+        }
+
+        .kv {
+            display: grid;
+            grid-template-columns: 110px 1fr;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 10px
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace
+        }
+
+        .small {
+            font-size: 12px
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+
+        <div class="topbar">
+            <div class="brand">
+                <div class="logo"></div>
+                <div>
+                    <div style="font-weight:800;letter-spacing:.4px">Mixer DeFi Desk</div>
+                    <div class="help">Lend · Withdraw · Stake · Borrow · Unstake</div>
+                </div>
+            </div>
+            <div class="right">
+                <span id="netPill" class="pill">Not connected</span>
+                <button id="btnConnect" class="btn secondary">Connect Wallet</button>
+                <button id="btnCfg" class="btn">Config</button>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Left: Lend / Withdraw -->
+            <div class="panel">
+                <div class="tabs">
+                    <div class="tab active" data-tab="lend">Lend to earn</div>
+                    <div class="tab" data-tab="withdraw">Withdraw</div>
+                </div>
+
+                <div id="tab-lend">
+                    <div class="grid">
+                        <div>
+                            <label class="help">Token</label>
+                            <select id="lendToken" class="input"></select>
+                        </div>
+                        <div>
+                            <label class="help">Amount</label>
+                            <input id="lendAmount" type="number" placeholder="0.0" class="input" min="0" step="any" />
+                        </div>
+                    </div>
+
+                    <div class="row-cols">
+                        <div class="chip" data-amt="0.1">0.1</div>
+                        <div class="chip" data-amt="1">1</div>
+                        <div class="chip" data-amt="10">10</div>
+                    </div>
+
+                    <div class="grid" style="margin-top:8px">
+                        <div>
+                            <label class="help">Lock duration</label>
+                            <select id="lockSel" class="input">
+                                <option value="0">Flexible (base APR)</option>
+                                <option value="7">7 days (APR + 1%)</option>
+                                <option value="30">30 days (APR + 3%)</option>
+                                <option value="90">90 days (APR + 7%)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="help">Est. APY</label>
+                            <input id="estApy" class="input" readonly value="—" />
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+                    <div class="col2">
+                        <div class="stat-card">
+                            <div class="help">Your balance</div>
+                            <div id="lendBal" class="mono">–</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="help">Previously lent (local)</div>
+                            <div id="lentInfo" class="mono">0</div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-top:14px">
+                        <button id="btnApproveLend" class="btn secondary">Approve</button>
+                        <button id="btnLend" class="btn">Lend</button>
+                    </div>
+                    <div class="help" style="margin-top:8px">
+                        * 未接入合约时，Lend/Withdraw 会使用本地 <code class="mono">localStorage</code> 记账用于演示。
+                        在右上角 <b>Config</b> 填写你的合约地址/ABI 后，将改为真实上链交易。
+                    </div>
+                </div>
+
+                <div id="tab-withdraw" style="display:none">
+                    <div class="grid">
+                        <div>
+                            <label class="help">Token</label>
+                            <select id="wdToken" class="input"></select>
+                        </div>
+                        <div>
+                            <label class="help">Withdraw amount</label>
+                            <input id="wdAmount" type="number" placeholder="0.0" class="input" min="0" step="any" />
+                        </div>
+                    </div>
+
+                    <div class="col2" style="margin-top:10px">
+                        <div class="stat-card">
+                            <div class="help">Accrued Interest (est.)</div>
+                            <div id="wdInterest" class="mono">–</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="help">Lock target</div>
+                            <div id="wdLockTarget" class="mono">–</div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-top:14px">
+                        <button id="btnWithdraw" class="btn warn">Withdraw</button>
+                    </div>
+                    <div class="help" style="margin-top:8px">
+                        * 若尚未达到指定锁定时长，将按“基础利率”计算（自动降级）。
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Stake / Borrow / Unstake -->
+            <div class="panel">
+                <div class="tabs">
+                    <div class="tab active" data-tab="stake">Stake</div>
+                    <div class="tab" data-tab="borrow">Borrow</div>
+                    <div class="tab" data-tab="unstake">Unstake</div>
+                </div>
+
+                <div id="tab-stake">
+                    <div class="grid">
+                        <div>
+                            <label class="help">Collateral token</label>
+                            <select id="stkToken" class="input"></select>
+                        </div>
+                        <div>
+                            <label class="help">Amount</label>
+                            <input id="stkAmount" type="number" placeholder="0.0" class="input" min="0" step="any" />
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="col2">
+                        <div class="stat-card">
+                            <div class="help">Your balance</div>
+                            <div id="stkBal" class="mono">–</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="help">Staked (local)</div>
+                            <div id="stakedInfo" class="mono">0</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:14px">
+                        <button id="btnApproveStake" class="btn secondary">Approve</button>
+                        <button id="btnStake" class="btn">Stake</button>
+                    </div>
+                </div>
+
+                <div id="tab-borrow" style="display:none">
+                    <div class="grid">
+                        <div>
+                            <label class="help">Borrow token</label>
+                            <select id="brToken" class="input"></select>
+                        </div>
+                        <div>
+                            <label class="help">To address</label>
+                            <input id="brTo" class="input mono" placeholder="0x..." />
+                        </div>
+                    </div>
+                    <div class="grid" style="margin-top:10px">
+                        <div>
+                            <label class="help">Amount</label>
+                            <input id="brAmount" type="number" placeholder="0.0" class="input" min="0" step="any" />
+                        </div>
+                        <div>
+                            <label class="help">Max borrowable</label>
+                            <input id="brMax" class="input" readonly value="–" />
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+                    <div class="help">可借上限 = Σ(抵押价值 × LTV) / 借出币价。示例价格可在 Config 中修改。</div>
+                    <div style="display:flex; gap:10px; margin-top:14px">
+                        <button id="btnBorrow" class="btn">Borrow</button>
+                    </div>
+                    <div class="help" style="margin-top:8px">* 未接入借贷合约时，此按钮只做演示记账。</div>
+                </div>
+
+                <div id="tab-unstake" style="display:none">
+                    <div class="grid">
+                        <div>
+                            <label class="help">Token</label>
+                            <select id="unstkToken" class="input"></select>
+                        </div>
+                        <div>
+                            <label class="help">Amount (available)</label>
+                            <input id="unstkAmount" class="input" placeholder="0.0" />
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <div style="display:flex; gap:10px; margin-top:14px">
+                        <button id="btnUnstake" class="btn warn">Unstake</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Market (Aave-like) -->
+        <div class="panel market">
+            <div class="h2">Core assets</div>
+            <table id="mktTable">
+                <thead>
+                    <tr>
+                        <th>Asset</th>
+                        <th>Total supplied</th>
+                        <th>Supply APY</th>
+                        <th>Total borrowed</th>
+                        <th>Borrow APY</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody><!-- rows injected --></tbody>
+            </table>
+            <div class="help">* 此处为演示数据，你可以接你的后端/合约返回进行替换。</div>
+        </div>
+
+        <div class="footer">© Mixer DeFi Desk — dark UI demo. Built with ethers.js. </div>
+    </div>
+
+    <!-- Config Drawer -->
+    <div id="drawer" class="drawer">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3>Configuration</h3>
+            <button id="btnCloseCfg" class="btn secondary">Close</button>
+        </div>
+
+        <p class="help">
+            如需**真实链上交互**：在下方填入你的 ERC20 / Lending / Mixer 合约地址。
+            如果没有，就保持空白以使用“演示模式”（localStorage 记账）。
+        </p>
+
+        <h3>Tokens</h3>
+        <div class="help">内置 4 种示例 Token（可编辑）。</div>
+        <div id="tokenCfg"></div>
+
+        <h3 style="margin-top:14px">Protocols (optional)</h3>
+        <div class="kv">
+            <div class="help">Lending</div>
+            <input id="cfgLending" class="input mono" placeholder="0x... (borrow/stake/unstake)" />
+        </div>
+        <div class="kv">
+            <div class="help">Mixer</div>
+            <input id="cfgMixer" class="input mono" placeholder="0x... (lend/withdraw)" />
+        </div>
+        <div class="kv">
+            <div class="help">Base APR</div>
+            <input id="cfgBaseApr" class="input mono" value="4.0" />
+        </div>
+        <div class="kv">
+            <div class="help">LTV</div>
+            <input id="cfgLtv" class="input mono" value="0.5" />
+        </div>
+
+        <p class="help">修改后会立即保存至浏览器（可刷新保留）。</p>
+    </div>
+
+    <script>
+        /* ===================== Utilities & State ===================== */
+        const { ethers } = window.ethers;
+
+        const state = {
+            provider: null, signer: null, addr: null, chainId: null,
+            config: {
+                baseAPR: 4.0, // %
+                ltv: 0.5,     // 50%
+                lendingAddr: "", mixerAddr: "",
+                tokens: [
+                    { sym: "ETH", addr: "eth", decimals: 18, price: 3500 },
+                    { sym: "DAI", addr: "", decimals: 18, price: 1 },
+                    { sym: "USDC", addr: "", decimals: 6, price: 1 },
+                    { sym: "WBTC", addr: "", decimals: 8, price: 65000 },
+                ],
+            },
+            local: {
+                lends: {},   // {sym: {amount, ts, lockDays, aprApplied}}
+                stakes: {},  // {sym: amount}
+                borrows: {}  // {sym: amount}
+            },
+            abis: {
+                erc20: [
+                    "function balanceOf(address) view returns (uint256)",
+                    "function decimals() view returns (uint8)",
+                    "function symbol() view returns (string)",
+                    "function approve(address,uint256) returns (bool)",
+                    "function allowance(address,address) view returns(uint256)",
+                    "function transfer(address,uint256) returns (bool)"
+                ],
+                mixer: [
+                    "function lend(address token,uint256 amount,uint256 lockDays) payable",
+                    "function withdraw(address token,uint256 amount)"
+                ],
+                lending: [
+                    "function stake(address token,uint256 amount)",
+                    "function unstake(address token,uint256 amount)",
+                    "function borrow(address token,uint256 amount,address to)"
+                ]
+            }
+        };
+
+        // Load persisted config/local
+        (function bootLoad() {
+            try {
+                const c = localStorage.getItem("mix-ui-config");
+                if (c) Object.assign(state.config, JSON.parse(c));
+                const l = localStorage.getItem("mix-ui-local");
+                if (l) Object.assign(state.local, JSON.parse(l));
+            } catch (e) { }
+        })();
+
+        function persist() {
+            localStorage.setItem("mix-ui-config", JSON.stringify(state.config));
+            localStorage.setItem("mix-ui-local", JSON.stringify(state.local));
+        }
+
+        function fmt(n, d = 4) { if (n === null || n === undefined || isNaN(n)) return "–"; return Number(n).toLocaleString(undefined, { maximumFractionDigits: d }); }
+        function now() { return Math.floor(Date.now() / 1000); }
+
+        /* ===================== Wallet ===================== */
+        async function connectWallet() {
+            if (!window.ethereum) { alert("未检测到钱包。请安装 MetaMask。"); return; }
+            state.provider = new ethers.providers.Web3Provider(window.ethereum);
+            await state.provider.send("eth_requestAccounts", []);
+            state.signer = state.provider.getSigner();
+            state.addr = await state.signer.getAddress();
+            const net = await state.provider.getNetwork();
+            state.chainId = Number(net.chainId);
+            document.getElementById("btnConnect").textContent = shortAddr(state.addr);
+            document.getElementById("netPill").textContent = `${net.name} (#${state.chainId})`;
+            refreshBalances();
+        }
+
+        function shortAddr(a) { return a ? a.slice(0, 6) + "…" + a.slice(-4) : ""; }
+
+        /* ===================== DOM Helpers ===================== */
+        function q(id) { return document.getElementById(id); }
+        function setSelOptions(selId) {
+            const sel = q(selId); sel.innerHTML = "";
+            state.config.tokens.forEach((t, i) => {
+                const op = document.createElement("option");
+                op.value = t.sym; op.textContent = t.sym;
+                sel.appendChild(op);
+            });
+        }
+
+        ["lendToken", "wdToken", "stkToken", "brToken", "unstkToken"].forEach(setSelOptions);
+
+        /* Quick amount chips */
+        document.querySelectorAll(".chip").forEach(c => {
+            c.addEventListener("click", () => {
+                document.querySelectorAll(".chip").forEach(x => x.classList.remove("active"));
+                c.classList.add("active");
+                q("lendAmount").value = c.dataset.amt;
+            });
+        });
+
+        /* Tabs */
+        document.querySelectorAll(".tab").forEach(tab => {
+            tab.addEventListener("click", () => {
+                const group = tab.parentElement.querySelectorAll(".tab");
+                group.forEach(t => t.classList.remove("active"));
+                tab.classList.add("active");
+                const name = tab.dataset.tab;
+                const panel = tab.closest(".panel");
+                panel.querySelectorAll("[id^='tab-']").forEach(d => d.style.display = "none");
+                panel.querySelector("#tab-" + name).style.display = "";
+            });
+        });
+
+        /* Drawer (Config) */
+        q("btnCfg").onclick = () => q("drawer").classList.add("open");
+        q("btnCloseCfg").onclick = () => q("drawer").classList.remove("open");
+
+        /* ===================== Config UI ===================== */
+        function renderTokenConfig() {
+            const box = q("tokenCfg"); box.innerHTML = "";
+            state.config.tokens.forEach((t, idx) => {
+                const row = document.createElement("div");
+                row.className = "kv";
+                row.innerHTML = `
+      <div class="help">${t.sym}</div>
+      <div style="display:grid;grid-template-columns:1fr 100px 100px;gap:6px">
+        <input class="input mono tok-addr" data-i="${idx}" placeholder="0x... (留空=演示)" value="${t.addr || ""}">
+        <input class="input mono tok-dec"  data-i="${idx}" value="${t.decimals}">
+        <input class="input mono tok-px"   data-i="${idx}" value="${t.price}">
+      </div>`;
+                box.appendChild(row);
+            });
+            box.querySelectorAll(".tok-addr").forEach(el => el.onchange = e => {
+                state.config.tokens[Number(e.target.dataset.i)].addr = e.target.value.trim();
+                persist();
+            });
+            box.querySelectorAll(".tok-dec").forEach(el => el.onchange = e => {
+                state.config.tokens[Number(e.target.dataset.i)].decimals = Number(e.target.value);
+                persist();
+            });
+            box.querySelectorAll(".tok-px").forEach(el => el.onchange = e => {
+                state.config.tokens[Number(e.target.dataset.i)].price = Number(e.target.value);
+                persist();
+            });
+
+            q("cfgLending").value = state.config.lendingAddr || "";
+            q("cfgMixer").value = state.config.mixerAddr || "";
+            q("cfgBaseApr").value = state.config.baseAPR;
+            q("cfgLtv").value = state.config.ltv;
+
+            q("cfgLending").onchange = e => { state.config.lendingAddr = e.target.value.trim(); persist(); }
+            q("cfgMixer").onchange = e => { state.config.mixerAddr = e.target.value.trim(); persist(); }
+            q("cfgBaseApr").onchange = e => { state.config.baseAPR = Number(e.target.value); apyPreview(); persist(); }
+            q("cfgLtv").onchange = e => { state.config.ltv = Number(e.target.value); computeMaxBorrow(); persist(); }
+        }
+        renderTokenConfig();
+
+        /* ===================== APY & Lock ===================== */
+        function apyPreview() {
+            const base = Number(state.config.baseAPR) || 0;
+            const lockD = Number(q("lockSel").value);
+            const bonus = (lockD >= 90 ? 7 : lockD >= 30 ? 3 : lockD >= 7 ? 1 : 0);
+            q("estApy").value = (base + bonus).toFixed(2) + "%";
+        }
+        q("lockSel").onchange = apyPreview; apyPreview();
+
+        /* ===================== Balances & ERC20 helpers ===================== */
+        async function tokenContract(sym) {
+            const t = state.config.tokens.find(x => x.sym === sym);
+            if (!t || !t.addr || t.addr.toLowerCase() === "eth") return null;
+            if (!state.signer) return null;
+            return new ethers.Contract(t.addr, state.abis.erc20, state.signer);
+        }
+
+        async function getBalance(sym) {
+            if (!state.provider || !state.addr) return 0;
+            const t = state.config.tokens.find(x => x.sym === sym);
+            try {
+                if (t.addr === "eth" || !t.addr) {
+                    const b = await state.provider.getBalance(state.addr);
+                    return Number(ethers.utils.formatUnits(b, 18));
+                } else {
+                    const c = await tokenContract(sym);
+                    const b = await c.balanceOf(state.addr);
+                    return Number(ethers.utils.formatUnits(b, t.decimals));
+                }
+            } catch (e) { return 0 }
+        }
+
+        async function refreshBalances() {
+            const lendSym = q("lendToken").value || "ETH";
+            const stkSym = q("stkToken").value || "ETH";
+            q("lendBal").textContent = fmt(await getBalance(lendSym));
+            q("stkBal").textContent = fmt(await getBalance(stkSym));
+            q("lentInfo").textContent = showLocal(state.local.lends);
+            q("stakedInfo").textContent = showLocal(state.local.stakes);
+            computeMaxBorrow();
+        }
+        ["lendToken", "stkToken"].forEach(id => q(id).onchange = refreshBalances);
+
+        function showLocal(obj) {
+            const arr = Object.entries(obj).map(([k, v]) => `${k}:${fmt(v.amount, 4)}`);
+            return arr.length ? arr.join(" | ") : "0";
+        }
+
+        /* ===================== Lend / Withdraw (demo or on-chain) ===================== */
+        q("btnApproveLend").onclick = async () => {
+            const sym = q("lendToken").value, amt = Number(q("lendAmount").value || 0);
+            if (!sym || !amt) return alert("请输入金额");
+            const c = await tokenContract(sym);
+            if (!c) { alert("原生 ETH 无需 approve；若是 ERC20 请在 Config 填地址"); return; }
+            const spender = state.config.mixerAddr || state.config.lendingAddr;
+            if (!spender) return alert("请在 Config 填写 Mixer 或 Lending 合约地址以进行真实 approve");
+            try {
+                const t = state.config.tokens.find(x => x.sym === sym);
+                const tx = await c.approve(spender, ethers.utils.parseUnits(String(amt), t.decimals));
+                alert("Sent approve: " + tx.hash);
+            } catch (e) { alert("Approve 失败: " + (e.message || e)) }
+        };
+
+        q("btnLend").onclick = async () => {
+            const sym = q("lendToken").value;
+            const amt = Number(q("lendAmount").value || 0);
+            if (!amt) return alert("请输入金额");
+            const lockDays = Number(q("lockSel").value);
+            const base = Number(state.config.baseAPR) || 0;
+            const bonus = (lockDays >= 90 ? 7 : lockDays >= 30 ? 3 : lockDays >= 7 ? 1 : 0);
+            const apr = base + bonus;
+
+            if (state.config.mixerAddr) { // on-chain attempt
+                try {
+                    const mixer = new ethers.Contract(state.config.mixerAddr, state.abis.mixer, state.signer);
+                    const tok = state.config.tokens.find(x => x.sym === sym);
+                    let overrides = {};
+                    let amountBN = ethers.utils.parseUnits(String(amt), tok.decimals);
+                    if (tok.addr === "eth" || !tok.addr) { overrides = { value: amountBN }; }
+                    const tx = await mixer.lend(tok.addr === "eth" ? ethers.constants.AddressZero : tok.addr, amountBN, lockDays, overrides);
+                    alert("Lend tx: " + tx.hash);
+                } catch (e) { alert("链上 lend 失败，改用演示模式。原因: " + (e.message || e)); }
+            }
+            // demo record
+            state.local.lends[sym] = { amount: (state.local.lends[sym]?.amount || 0) + amt, ts: now(), lockDays, aprApplied: apr };
+            persist(); refreshBalances(); apyPreview();
+            alert(`Lent ${amt} ${sym}\n锁定: ${lockDays} 天\nAPR: ${apr}%`);
+        };
+
+        function calcInterest(rec) {
+            if (!rec) return 0;
+            const days = (now() - rec.ts) / 86400;
+            const target = rec.lockDays || 0;
+            const base = Number(state.config.baseAPR) || 0;
+            const applyAPR = (days >= target) ? rec.aprApplied : base; // degrade if early
+            const interest = rec.amount * applyAPR / 100 * (days / 365);
+            return { interest, days, target, aprUsed: applyAPR };
+        }
+
+        q("wdToken").onchange = () => {
+            const sym = q("wdToken").value;
+            const rec = state.local.lends[sym];
+            const c = calcInterest(rec);
+            if (!rec) { q("wdInterest").textContent = "–"; q("wdLockTarget").textContent = "–"; return; }
+            q("wdInterest").textContent = `${fmt(c.interest, 6)} (APR used ${c.aprUsed}%, days ${fmt(c.days, 2)})`;
+            q("wdLockTarget").textContent = `${rec.lockDays} days`;
+        };
+        q("wdAmount").oninput = () => q("wdToken").dispatchEvent(new Event("change"));
+
+        q("btnWithdraw").onclick = async () => {
+            const sym = q("wdToken").value;
+            const amt = Number(q("wdAmount").value || 0);
+            if (!amt) return alert("请输入金额");
+            const rec = state.local.lends[sym];
+            if (!rec || amt > rec.amount) return alert("可提取不足");
+            const c = calcInterest(rec);
+
+            if (state.config.mixerAddr) {
+                try {
+                    const mixer = new ethers.Contract(state.config.mixerAddr, state.abis.mixer, state.signer);
+                    const tok = state.config.tokens.find(x => x.sym === sym);
+                    const tx = await mixer.withdraw(tok.addr === "eth" ? ethers.constants.AddressZero : tok.addr,
+                        ethers.utils.parseUnits(String(amt), tok.decimals));
+                    alert("Withdraw tx: " + tx.hash);
+                } catch (e) { alert("链上 withdraw 失败，改用演示模式。原因: " + (e.message || e)); }
+            }
+
+            rec.amount -= amt;
+            if (rec.amount <= 0) delete state.local.lends[sym];
+            persist(); refreshBalances();
+            alert(`Withdrawn ${amt} ${sym}\n计息(已按规则处理): ~${fmt(c.interest, 6)} ${sym}`);
+        };
+
+        /* ===================== Stake / Borrow / Unstake ===================== */
+        q("btnApproveStake").onclick = async () => {
+            const sym = q("stkToken").value, amt = Number(q("stkAmount").value || 0);
+            if (!sym || !amt) return alert("请输入金额");
+            const c = await tokenContract(sym);
+            if (!c) { alert("原生 ETH 无需 approve；若是 ERC20 请在 Config 填地址"); return; }
+            const spender = state.config.lendingAddr || state.config.mixerAddr;
+            if (!spender) return alert("请在 Config 填写 Lending 或 Mixer 合约地址以进行真实 approve");
+            try {
+                const t = state.config.tokens.find(x => x.sym === sym);
+                const tx = await c.approve(spender, ethers.utils.parseUnits(String(amt), t.decimals));
+                alert("Sent approve: " + tx.hash);
+            } catch (e) { alert("Approve 失败: " + (e.message || e)) }
+        };
+
+        q("btnStake").onclick = async () => {
+            const sym = q("stkToken").value;
+            const amt = Number(q("stkAmount").value || 0);
+            if (!amt) return alert("请输入金额");
+            if (state.config.lendingAddr) {
+                try {
+                    const L = new ethers.Contract(state.config.lendingAddr, state.abis.lending, state.signer);
+                    const t = state.config.tokens.find(x => x.sym === sym);
+                    const amountBN = ethers.utils.parseUnits(String(amt), t.decimals);
+                    const tx = await L.stake(t.addr === "eth" ? ethers.constants.AddressZero : t.addr, amountBN, t.addr === "eth" ? { value: amountBN } : {});
+                    alert("Stake tx: " + tx.hash);
+                } catch (e) { alert("链上 stake 失败，将使用演示模式。原因: " + (e.message || e)); }
+            }
+            state.local.stakes[sym] = (state.local.stakes[sym] || 0) + amt;
+            persist(); refreshBalances();
+            alert(`Staked ${amt} ${sym}`);
+        };
+
+        function totalCollateralValueUSD() {
+            let usd = 0;
+            for (const [sym, amount] of Object.entries(state.local.stakes)) {
+                const t = state.config.tokens.find(x => x.sym === sym);
+                usd += (amount || 0) * (t?.price || 0);
+            }
+            return usd;
+        }
+        function computeMaxBorrow() {
+            const usd = totalCollateralValueUSD();
+            const ltv = Number(state.config.ltv) || 0.5;
+            const brSym = q("brToken").value || "DAI";
+            const t = state.config.tokens.find(x => x.sym === brSym);
+            const max = usd * ltv / (t?.price || 1);
+            q("brMax").value = isFinite(max) ? fmt(max, 6) : "–";
+        }
+        ["brToken"].forEach(id => q(id).onchange = computeMaxBorrow);
+
+        q("btnBorrow").onclick = async () => {
+            const sym = q("brToken").value;
+            const amt = Number(q("brAmount").value || 0);
+            const to = q("brTo").value.trim() || state.addr;
+            if (!amt) return alert("请输入金额");
+            const max = Number((q("brMax").value || "0").replace(/,/g, ""));
+            if (amt > max + 1e-12) return alert("超过可借上限");
+
+            if (state.config.lendingAddr) {
+                try {
+                    const L = new ethers.Contract(state.config.lendingAddr, state.abis.lending, state.signer);
+                    const t = state.config.tokens.find(x => x.sym === sym);
+                    const tx = await L.borrow(t.addr, ethers.utils.parseUnits(String(amt), t.decimals), to);
+                    alert("Borrow tx: " + tx.hash);
+                } catch (e) { alert("链上 borrow 失败，将使用演示模式。原因: " + (e.message || e)); }
+            }
+            state.local.borrows[sym] = (state.local.borrows[sym] || 0) + amt;
+            persist(); alert(`Borrowed ${amt} ${sym} → ${to}`);
+        };
+
+        q("unstkToken").onchange = () => {
+            const sym = q("unstkToken").value;
+            const avail = state.local.stakes[sym] || 0;
+            q("unstkAmount").value = avail;
+        };
+        q("unstkToken").dispatchEvent(new Event("change"));
+
+        q("btnUnstake").onclick = async () => {
+            const sym = q("unstkToken").value;
+            const amt = Number(q("unstkAmount").value || 0);
+            if (amt <= 0) return alert("请输入金额");
+            if ((state.local.stakes[sym] || 0) < amt) return alert("可用抵押不足");
+            if (state.config.lendingAddr) {
+                try {
+                    const L = new ethers.Contract(state.config.lendingAddr, state.abis.lending, state.signer);
+                    const t = state.config.tokens.find(x => x.sym === sym);
+                    const tx = await L.unstake(t.addr, ethers.utils.parseUnits(String(amt), t.decimals));
+                    alert("Unstake tx: " + tx.hash);
+                } catch (e) { alert("链上 unstake 失败，将使用演示模式。原因: " + (e.message || e)); }
+            }
+            state.local.stakes[sym] -= amt; if (state.local.stakes[sym] <= 0) delete state.local.stakes[sym];
+            persist(); refreshBalances(); alert(`Unstaked ${amt} ${sym}`);
+        };
+
+        /* ===================== Market Table (demo data) ===================== */
+        const demoRows = [
+            { sym: "ETH", supplied: "2.47M", supplyApy: "2.00%", borrowed: "2.20M", borrowApy: "2.65%" },
+            { sym: "DAI", supplied: "5.12B", supplyApy: "5.10%", borrowed: "4.66B", borrowApy: "6.20%" },
+            { sym: "USDC", supplied: "5.83B", supplyApy: "4.89%", borrowed: "5.05B", borrowApy: "6.32%" },
+            { sym: "WBTC", supplied: "43.9K", supplyApy: "0.01%", borrowed: "3.39K", borrowApy: "0.39%" },
+        ];
+        function renderMarket() {
+            const tb = q("mktTable").querySelector("tbody"); tb.innerHTML = "";
+            demoRows.forEach(r => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+      <td><b>${r.sym}</b></td>
+      <td>${r.supplied}</td>
+      <td><span class="tag">${r.supplyApy}</span></td>
+      <td>${r.borrowed}</td>
+      <td><span class="tag">${r.borrowApy}</span></td>
+      <td class="right"><button class="btn secondary small" onclick="quickSelect('${r.sym}')">Details</button></td>`;
+                tb.appendChild(tr);
+            });
+        }
+        window.quickSelect = (sym) => {
+            // Quick choose in both areas
+            ["lendToken", "wdToken", "stkToken", "brToken", "unstkToken"].forEach(id => {
+                const sel = q(id); for (const o of sel.options) { if (o.value === sym) { sel.value = sym; break; } }
+            });
+            refreshBalances(); computeMaxBorrow();
+        };
+        renderMarket();
+
+        /* ===================== Init ===================== */
+        q("btnConnect").onclick = connectWallet;
+        ["lendToken", "wdToken"].forEach(id => q(id).dispatchEvent(new Event("change")));
+        refreshBalances();
+        computeMaxBorrow();
+    </script>
+</body>
+
+</html>
