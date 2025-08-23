@@ -2,13 +2,12 @@
   <header class="flex items-center justify-between animate-fade-in">
     <!-- Brand -->
     <div class="flex items-center gap-4">
-      <div class="tornado-logo animate-tornado relative">
-        <!-- Tornado Icon -->
-        <div class="absolute inset-0 flex items-center justify-center">
-          <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 2L2 22h20L12 2zm0 4.5L18.5 20h-13L12 6.5z"/>
-          </svg>
-        </div>
+      <div class="logo-container">
+        <img 
+          src="/pioneer.jpg" 
+          alt="Pioneer Logo" 
+          class="w-12 h-12 rounded-xl object-cover border-2 border-green-400/30 hover:border-green-400 transition-all duration-300"
+        />
       </div>
       <div>
         <h1 class="text-xl font-bold tracking-wide">PIONEER</h1>
