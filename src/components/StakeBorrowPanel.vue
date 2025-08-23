@@ -128,7 +128,7 @@
             <div v-if="borrowInfo.record" class="text-xs text-mixer-muted mt-1">
               Remaining available: {{ formatNumber(borrowInfo.remainingBorrowable, 6) }} {{ borrowForm.token }}
             </div>
-            <!-- 超出可借款金额的警告提示 -->
+            <!-- Warning for exceeding borrowable amount -->
             <div v-if="borrowAmountExceeded" class="text-xs text-red-400 mt-1 font-medium">
               ⚠️ Amount exceeds remaining borrowable limit ({{ formatNumber(borrowInfo.remainingBorrowable, 6) }} {{ borrowForm.token }})
             </div>
@@ -171,7 +171,7 @@
 
       <div class="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
         <p class="text-sm text-blue-300">
-          可借上限 = 抵押价值 × LTV ({{ walletStore.config.ltv * 100 || 50 }}%) / 借出币价。示例价格可在 Config 中修改。
+          Max borrowable = Collateral value × LTV ({{ walletStore.config.ltv * 100 || 50 }}%) / Borrow token price. Example prices can be modified in Config.
         </p>
       </div>
 
@@ -191,7 +191,7 @@
         </button>
       </div>
 
-      <!-- 额外的错误提示区域 -->
+      <!-- Additional error warning area -->
       <div v-if="borrowAmountExceeded" class="bg-red-900/20 border border-red-500 rounded-lg p-3">
         <div class="text-red-400 text-sm font-medium">
           🚫 Cannot Borrow: Amount Exceeds Available Limit
@@ -203,7 +203,7 @@
       </div>
 
       <p class="text-xs text-mixer-muted">
-        * 未接入借贷合约时，此按钮只做演示记账。借款将产生利息费用。
+        * When lending contracts are not connected, this button only performs demo accounting. Borrowing will incur interest charges.
       </p>
     </div>
 
@@ -282,7 +282,7 @@
           </div>
         </div>
         
-        <!-- 显示需要偿还的具体币种明细 -->
+        <!-- Display breakdown of required repayments by token -->
         <div v-if="unstakeInfo.debtBreakdown && Object.keys(unstakeInfo.debtBreakdown).length > 0" class="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3">
           <div class="text-yellow-300 text-sm font-medium mb-2">Required repayments by token:</div>
           <div v-for="(amount, token) in unstakeInfo.debtBreakdown" :key="token" class="text-yellow-200 text-xs">
@@ -304,7 +304,7 @@
       </div>
 
       <p class="text-xs text-mixer-muted">
-        * Unstake需要偿还所有借款本金和利息。系统将自动计算所需金额。
+        * Unstaking requires repayment of all borrowed principal and interest. The system will automatically calculate the required amount.
       </p>
     </div>
   </div>
@@ -356,7 +356,7 @@ const tabs = [
 
 // Computed
 const borrowAPR = computed(() => {
-  const base = Number(walletStore.config.borrowAPR) || 8 // 默认8%借款利率
+  const base = Number(walletStore.config.borrowAPR) || 8 // Default 8% borrowing rate
   return base.toFixed(2) + '%'
 })
 
@@ -393,17 +393,17 @@ const borrowInfo = computed(() => {
     }
   }
   
-  // 计算抵押品价值
+  // Calculate collateral value
   const tokenData = walletStore.config.tokens.find(t => t.sym === record.token)
   const collateralValueUSD = (record.amount || 0) * (tokenData?.price || 0)
   
-  // 计算原始最大可借金额（USD）
+  // Calculate original max borrowable amount (USD)
   const ltv = Number(walletStore.config.ltv) || 0.5
   const maxBorrowableUSD = collateralValueUSD * ltv
   
-  // 计算当前已借金额的USD总值（仅本金，不包含利息）
+  // Calculate currently borrowed amount's USD total (principal only, excluding interest)
   let totalBorrowedUSD = 0
-  // 计算当前债务（包含利息）用于显示
+  // Calculate current debt (including interest) for display
   let totalDebtUSD = 0
   if (record.borrows) {
     const currentTime = now()
@@ -413,14 +413,14 @@ const borrowInfo = computed(() => {
       const principal = borrowData.amount || 0
       const tokenPrice = walletStore.config.tokens.find(t => t.sym === token)?.price || 1
       
-      // 只计算本金，不包含利息，因为available borrow应该基于原始借款金额
+      // Only calculate principal, excluding interest, because available borrow should be based on original borrow amount
       totalBorrowedUSD += principal * tokenPrice
       
-      // 计算包含利息的债务用于显示
+      // Calculate debt including interest for display
       const borrowTime = borrowData.borrowTime || currentTime
       const elapsedTime = currentTime - borrowTime
       const days = elapsedTime / 86400
-      // 自然日计算，不足一天等于一天，向上取整
+      // Natural day calculation, less than one day equals one day, round up
       const daysForCalculation = Math.max(1, Math.ceil(days))
       
       const interest = principal * borrowAPRValue / 100 * (daysForCalculation / 365)
@@ -430,10 +430,10 @@ const borrowInfo = computed(() => {
     }
   }
   
-  // 计算剩余可借金额（USD）
+  // Calculate remaining borrowable amount (USD)
   const remainingBorrowableUSD = Math.max(0, maxBorrowableUSD - totalBorrowedUSD)
   
-  // 转换为当前选择的借款币种
+  // Convert to currently selected borrowing token
   const borrowToken = walletStore.config.tokens.find(t => t.sym === borrowForm.value.token)
   const borrowTokenPrice = borrowToken?.price || 1
   const remainingBorrowableAmount = remainingBorrowableUSD / borrowTokenPrice
@@ -443,9 +443,9 @@ const borrowInfo = computed(() => {
     maxBorrowable: maxBorrowableAmount,
     remainingBorrowable: remainingBorrowableAmount,
     currentDebt: totalDebtUSD > 0 ? `$${formatNumber(totalDebtUSD, 2)}` : '$0',
-    currentDebtValue: totalDebtUSD, // 原始USD数值用于货币转换
+    currentDebtValue: totalDebtUSD, // Original USD value for currency conversion
     collateralValue: `$${formatNumber(collateralValueUSD, 2)}`,
-    collateralValueUSD: collateralValueUSD, // 原始USD数值用于货币转换
+    collateralValueUSD: collateralValueUSD, // Original USD value for currency conversion
     noteStatus: 'Valid',
     record: record
   }
