@@ -56,6 +56,18 @@
         </svg>
         Config
       </button>
+
+      <!-- Clear Cache Button -->
+      <button 
+        @click="clearCache"
+        class="tornado-button-danger"
+        title="Clear all cached data"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+        Clear Cache
+      </button>
     </div>
   </header>
 </template>
@@ -103,5 +115,38 @@ async function handleConnectWallet() {
 
 function openConfig() {
   emit('open-config')
+}
+
+async function clearCache() {
+  try {
+    // 显示确认对话框
+    const confirmed = confirm(
+      '⚠️ 确定要清空所有缓存数据吗？\n\n这将删除：\n• 所有借贷记录\n• 所有质押记录\n• 所有交易笔记\n• 配置设置\n\n此操作不可撤销！'
+    )
+    
+    if (!confirmed) {
+      return
+    }
+    
+    // 清空缓存
+    const success = walletStore.clearAllData()
+    
+    if (success) {
+      notificationStore.success(
+        '🗑️ 缓存已清空', 
+        '所有本地数据已成功删除。页面将在3秒后刷新。'
+      )
+      
+      // 延迟刷新页面以应用更改
+      setTimeout(() => {
+        window.location.reload()
+      }, 3000)
+    } else {
+      notificationStore.error('清空失败', '清空缓存时发生错误，请重试')
+    }
+  } catch (error) {
+    console.error('清空缓存时出错:', error)
+    notificationStore.error('操作失败', error.message)
+  }
 }
 </script>
