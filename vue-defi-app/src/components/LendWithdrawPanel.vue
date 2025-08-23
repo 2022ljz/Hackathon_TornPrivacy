@@ -103,8 +103,8 @@
       </div>
 
       <p class="text-xs text-mixer-muted">
-        * 未接入合约时，Lend/Withdraw 会使用本地 localStorage 记账用于演示。
-        在右上角 Config 填写你的合约地址/ABI 后，将改为真实上链交易。
+        * When not connected to contracts, Lend/Withdraw will use local localStorage for demonstration.
+        After filling in your contract address/ABI in the Config (top right), it will change to real on-chain transactions.
       </p>
     </div>
 
@@ -292,7 +292,7 @@
       </div>
 
       <p class="text-xs text-mixer-muted">
-        * 若尚未达到指定锁定时长，将按"基础利率"计算（自动降级）。
+        * If the specified lock duration has not been reached, interest will be calculated at "base rate" (automatic downgrade).
       </p>
     </div>
   </div>
@@ -314,9 +314,9 @@ const isApproving = ref(false)
 const isLending = ref(false)
 const isWithdrawing = ref(false)
 const showConfirmModal = ref(false)
-const showInvalidModal = ref(false) // 添加无效交易提示弹窗状态
+const showInvalidModal = ref(false) // Add invalid transaction prompt modal state
 const confirmationInfo = ref({})
-const invalidInfo = ref({}) // 添加无效交易信息
+const invalidInfo = ref({}) // Add invalid transaction information
 
 // Forms
 const lendForm = ref({
@@ -353,7 +353,7 @@ const withdrawInfo = computed(() => {
     return { interest: '–', lockTarget: '–', noteStatus: 'Please enter note' }
   }
   
-  // 调试信息
+  // Debug information
   console.log('🔍 Debug withdraw info:', {
     note,
     noteLength: note.length,
@@ -370,7 +370,7 @@ const withdrawInfo = computed(() => {
   
   const record = walletStore.localData.notes[note]
   if (!record) {
-    // 尝试部分匹配（如果用户输入的 note 被截断）
+    // Try partial matching (if user input note is truncated)
     if (note.length >= 60) {
       const matchingNotes = Object.keys(walletStore.localData.notes).filter(key => 
         key.startsWith(note) || note.startsWith(key.substring(0, note.length))
@@ -382,7 +382,7 @@ const withdrawInfo = computed(() => {
         
         console.log('🔧 Found partial match:', { note, fullNote })
         
-        // 自动补全 note
+        // Auto-complete note
         setTimeout(() => {
           withdrawForm.value.note = fullNote
         }, 100)
@@ -400,11 +400,11 @@ const withdrawInfo = computed(() => {
   
   const currentTime = now()
   const lendTime = record.lendTime
-  const interestTime = record.interestTime // 锁定时间（秒）
+  const interestTime = record.interestTime // Lock time (seconds)
   const elapsedTime = currentTime - lendTime
   
-  // 始终显示承诺的利率，因为这是用户存入时的预期收益
-  // 实际提取时会根据是否满足锁定期来决定使用哪个利率
+  // Always display the promised rate, as this is the user's expected return when depositing
+  // When actually withdrawing, it will decide which rate to use based on whether the lock period is met
   const aprUsed = record.promisedAPR
   let interestCalculation
   
@@ -416,13 +416,13 @@ const withdrawInfo = computed(() => {
   
   const days = elapsedTime / 86400
   
-  // 按天为最小单位计算利息，不足一天按一天计算
-  const daysForCalculation = Math.max(1, Math.ceil(days)) // 向上取整，最少1天
+  // Calculate by day as minimum unit, less than one day counts as one day
+  const daysForCalculation = Math.max(1, Math.ceil(days)) // Round up, minimum 1 day
   
-  // 获取用户输入的提取金额
+  // Get user input withdrawal amount
   const withdrawAmount = Number(withdrawForm.value.amount) || record.amount
   
-  // 计算总利息和对应提取金额的利息
+  // Calculate total interest and corresponding interest for withdrawal amount
   const totalInterest = record.amount * aprUsed / 100 * (daysForCalculation / 365)
   const withdrawRatio = withdrawAmount / record.amount
   const displayInterest = totalInterest * withdrawRatio
@@ -464,7 +464,7 @@ const canWithdraw = computed(() => {
 
 // Methods
 function generateTransactionNote() {
-  // 生成32位随机哈希值作为交易凭证
+  // Generate 32-bit random hash as transaction proof
   const chars = '0123456789abcdef'
   let result = '0x'
   for (let i = 0; i < 64; i++) {
@@ -580,18 +580,18 @@ async function lend() {
     const bonus = lockDays >= 90 ? 7 : lockDays >= 30 ? 3 : lockDays >= 7 ? 1 : 0
     const promisedAPR = base + bonus
     
-    // 生成唯一交易凭证
+    // Generate unique transaction proof
     const note = generateTransactionNote()
     const currentTime = now()
-    const interestTime = lockDays * 24 * 60 * 60 // 转换为秒
+    const interestTime = lockDays * 24 * 60 * 60 // Convert to seconds
     
-    // 初始化 notes 对象如果不存在
+    // Initialize notes object if it doesn't exist
     if (!walletStore.localData.notes) {
       walletStore.localData.notes = {}
       console.log('🔧 Initialized notes object')
     }
     
-    // 保存交易记录到 note
+    // Save transaction record to note
     walletStore.localData.notes[note] = {
       token,
       amount,
@@ -612,15 +612,15 @@ async function lend() {
     walletStore.persistData()
     console.log('💿 Data persisted to localStorage')
     
-    // 更新本地余额 - Lend操作减少可用余额
+    // Update local balance - Lend operation reduces available balance
     walletStore.handleLendOperation(token, amount)
     
-    // 验证数据是否正确保存
+    // Verify data is saved correctly
     const savedData = JSON.parse(localStorage.getItem("mixer-local") || '{}')
     console.log('✅ Verification - localStorage content:', savedData)
     await updateBalance()
     
-    // 记录到控制台
+    // Log to console
     console.log('🎯 Lend Transaction Created:', {
       note,
       token,
@@ -630,7 +630,7 @@ async function lend() {
       timestamp: new Date().toISOString()
     })
     
-    // 创建带有复制按钮的持久通知
+    // Create persistent notification with copy button
     notificationStore.persistentSuccess(
       'Lend Successful! 🎉',
       `Successfully lent ${amount} ${token}\nLock period: ${lockDays} days\nAPR: ${promisedAPR}%\n\n⚠️ IMPORTANT: Save your transaction note securely!\nYou need it to withdraw your funds.\n\nTransaction Note:\n${note}`,
@@ -662,9 +662,9 @@ async function lend() {
 async function handleWithdrawClick() {
   if (!canWithdraw.value) return
   
-  // 设置响应检测超时
+  // Set response detection timeout
   const timeoutId = setTimeout(() => {
-    // 如果3秒内没有显示确认弹窗，显示错误
+    // If confirmation modal is not shown within 3 seconds, show error
     if (!showConfirmModal.value) {
       invalidInfo.value = {
         issue: 'Withdraw operation timeout',
@@ -677,17 +677,17 @@ async function handleWithdrawClick() {
   }, 3000)
   
   try {
-    // 验证交易有效性
+    // Validate transaction validity
     const validationResult = validateWithdrawTransaction()
     if (!validationResult.isValid) {
       clearTimeout(timeoutId)
-      // 显示无效交易弹窗
+      // Show invalid transaction modal
       invalidInfo.value = validationResult.error
       showInvalidModal.value = true
       return
     }
     
-    // 获取当前记录信息
+    // Get current record information
     const note = withdrawForm.value.note
     const amount = Number(withdrawForm.value.amount)
     const record = walletStore.localData.notes[note]
@@ -700,7 +700,7 @@ async function handleWithdrawClick() {
     const days = elapsedTime / 86400
     const remainingDays = Math.max(0, (interestTime - elapsedTime) / 86400)
     
-    // 计算利息预估
+    // Calculate interest estimate
     let aprUsed
     if (isEarlyWithdraw) {
       aprUsed = record.baseAPR
@@ -713,7 +713,7 @@ async function handleWithdrawClick() {
     const withdrawRatio = amount / record.amount
     const estimatedInterest = totalInterest * withdrawRatio
     
-    // 设置确认信息
+    // Set confirmation information
     confirmationInfo.value = {
       isEarlyWithdraw,
       lockDays: record.lockDays,
