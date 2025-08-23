@@ -682,7 +682,8 @@ async function updateStakeBalance() {
 
 async function updateBorrowBalance() {
   if (walletStore.isConnected) {
-    borrowBalance.value = await walletStore.getBalance(borrowForm.value.token)
+    // 使用本地余额而不是链上余额
+    borrowBalance.value = walletStore.getLocalBalance(borrowForm.value.token)
   }
 }
 
@@ -950,6 +951,7 @@ async function unstake() {
     
     // 更新本地余额 - Unstake操作
     // 计算需要从每种借款代币中扣除的总额（本金+利息）
+    const currentTime = now()
     let totalBorrowTokensToDeduct = {}
     if (record.borrows) {
       for (const [borrowToken, borrowData] of Object.entries(record.borrows)) {
@@ -957,7 +959,8 @@ async function unstake() {
         const borrowTime = borrowData.borrowTime || currentTime
         const elapsedTime = currentTime - borrowTime
         const days = elapsedTime / 86400
-        const daysForCalculation = Math.max(0, days)
+        // 确保利率按自然日计算，不足一天按一天算，向上取整
+        const daysForCalculation = Math.max(1, Math.ceil(days))
         const dailyInterestRate = (Number(walletStore.config.borrowAPR) || 8) / 100 / 365
         const interest = principal * dailyInterestRate * daysForCalculation
         totalBorrowTokensToDeduct[borrowToken] = principal + interest
@@ -996,6 +999,7 @@ watch(() => stakeForm.value.token, updateStakeBalance)
 watch(() => borrowForm.value.token, updateBorrowBalance) // 监听借款币种变化
 watch(() => walletStore.isConnected, updateStakeBalance)
 watch(() => walletStore.isConnected, updateBorrowBalance) // 监听钱包连接状态变化
+watch(() => walletStore.localData.balance, updateBorrowBalance, { deep: true }) // 监听本地余额变化
 watch(() => walletStore.isConnected, () => {
   if (walletStore.isConnected && !borrowForm.value.toAddress) {
     borrowForm.value.toAddress = walletStore.address

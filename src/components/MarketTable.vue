@@ -84,12 +84,6 @@
         </tbody>
       </table>
     </div>
-
-    <div class="mt-6 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-      <p class="text-sm text-orange-300">
-        * 此处为演示数据，你可以接你的后端/合约返回进行替换。数据每30秒自动更新。
-      </p>
-    </div>
   </div>
 </template>
 
