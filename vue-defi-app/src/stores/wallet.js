@@ -16,6 +16,7 @@ export const useWalletStore = defineStore('wallet', () => {
     // Config
     const config = ref({
         baseAPR: 4.0,
+        borrowAPR: 8.0,  // 添加借款利率
         ltv: 0.5,
         lendingAddr: "",
         mixerAddr: "",
@@ -32,7 +33,8 @@ export const useWalletStore = defineStore('wallet', () => {
         lends: {},
         stakes: {},
         borrows: {},
-        notes: {}
+        notes: {},
+        stakeNotes: {}  // 新增stake notes存储
     })
 
     // ABIs
@@ -229,15 +231,22 @@ export const useWalletStore = defineStore('wallet', () => {
         if (!token) return 0
 
         try {
+            let walletBalance = 0
+
             if (token.addr === "eth" || !token.addr) {
                 const balance = await provider.value.getBalance(address.value)
-                return Number(ethers.utils.formatUnits(balance, 18))
+                walletBalance = Number(ethers.utils.formatUnits(balance, 18))
             } else {
                 const contract = await getTokenContract(symbol)
                 if (!contract) return 0
                 const balance = await contract.balanceOf(address.value)
-                return Number(ethers.utils.formatUnits(balance, token.decimals))
+                walletBalance = Number(ethers.utils.formatUnits(balance, token.decimals))
             }
+
+            // 添加借款余额（如果有的话）
+            const borrowedAmount = localData.value.borrows[symbol] || 0
+
+            return walletBalance + borrowedAmount
         } catch (error) {
             console.error(`Error getting balance for ${symbol}:`, error)
             return 0
@@ -278,6 +287,44 @@ export const useWalletStore = defineStore('wallet', () => {
         }
     }
 
+    function clearAllData() {
+        try {
+            // 清空 localStorage 中的所有数据
+            localStorage.removeItem("mixer-config")
+            localStorage.removeItem("mixer-local")
+
+            // 重置 localData 到初始状态
+            localData.value = {
+                lends: {},
+                stakes: {},
+                borrows: {},
+                notes: {},
+                stakeNotes: {}
+            }
+
+            // 重置配置到默认值
+            config.value = {
+                baseAPR: 4.0,
+                borrowAPR: 8.0,
+                ltv: 0.5,
+                lendingAddr: "",
+                mixerAddr: "",
+                tokens: [
+                    { sym: "ETH", addr: "eth", decimals: 18, price: 3500 },
+                    { sym: "DAI", addr: "", decimals: 18, price: 1 },
+                    { sym: "USDC", addr: "", decimals: 6, price: 1 },
+                    { sym: "WBTC", addr: "", decimals: 8, price: 65000 },
+                ],
+            }
+
+            console.log("✅ All cache data cleared successfully")
+            return true
+        } catch (error) {
+            console.error("❌ Failed to clear cache data:", error)
+            return false
+        }
+    }
+
     return {
         // State
         provider,
@@ -300,6 +347,7 @@ export const useWalletStore = defineStore('wallet', () => {
         getTokenContract,
         getBalance,
         loadPersistedData,
-        persistData
+        persistData,
+        clearAllData
     }
 })

@@ -138,6 +138,18 @@
             Max available: {{ formatNumber(withdrawInfo.record.amount, 6) }} {{ withdrawInfo.record.token }}
           </div>
         </div>
+
+        <!-- Quick Amount Chips for Withdraw -->
+        <div class="grid grid-cols-4 gap-2">
+          <button 
+            v-for="amount in quickAmounts" 
+            :key="amount"
+            @click="setQuickWithdrawAmount(amount)"
+            :class="['tornado-chip', { active: withdrawForm.amount == amount }]"
+          >
+            {{ amount }}
+          </button>
+        </div>
         <div>
           <label class="block text-sm text-mixer-muted mb-2">Wallet Address</label>
           <input 
@@ -180,7 +192,7 @@
       <!-- Confirmation Modal -->
       <div v-if="showConfirmModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="closeModal">
         <div class="bg-mixer-dark border border-mixer-border rounded-lg p-6 max-w-md mx-4" @click.stop>
-          <h3 class="text-lg font-semibold mb-4 text-white">确认提取操作</h3>
+          <h3 class="text-lg font-semibold mb-4 text-white">Confirm Withdrawal</h3>
           
           <div class="space-y-3 mb-6">
             <div class="bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-3">
@@ -188,41 +200,82 @@
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                 </svg>
-                提前提取警告
+                Early Withdrawal Warning
               </div>
               <div v-if="confirmationInfo.isEarlyWithdraw" class="text-sm text-yellow-300">
-                您尚未满足 {{ confirmationInfo.lockDays }} 天的锁定期要求
-                <br>剩余时间：{{ confirmationInfo.remainingDays }} 天
-                <br><strong>利率将从 {{ confirmationInfo.promisedAPR }}% 降至 {{ confirmationInfo.baseAPR }}%</strong>
+                You have not met the {{ confirmationInfo.lockDays }}-day lock period requirement
+                <br>Remaining time: {{ confirmationInfo.remainingDays }} days
+                <br><strong>Interest rate will drop from {{ confirmationInfo.promisedAPR }}% to {{ confirmationInfo.baseAPR }}%</strong>
               </div>
               <div v-else class="text-sm text-green-300">
-                ✅ 已满足锁定期要求，将按承诺利率 {{ confirmationInfo.promisedAPR }}% 计算
+                ✅ Lock period requirement met, will use promised rate {{ confirmationInfo.promisedAPR }}%
               </div>
             </div>
             
             <div class="grid grid-cols-2 gap-3 text-sm">
               <div class="bg-mixer-panel rounded p-3">
-                <div class="text-mixer-muted">提取本金</div>
+                <div class="text-mixer-muted">Withdrawal Principal</div>
                 <div class="font-mono text-white">{{ withdrawForm.amount }} {{ confirmationInfo.token }}</div>
               </div>
               <div class="bg-mixer-panel rounded p-3">
-                <div class="text-mixer-muted">预计利息</div>
+                <div class="text-mixer-muted">Estimated Interest</div>
                 <div class="font-mono text-green-400">{{ confirmationInfo.estimatedInterest }} {{ confirmationInfo.token }}</div>
               </div>
             </div>
             
             <div class="bg-mixer-panel rounded p-3 text-sm">
-              <div class="text-mixer-muted mb-1">转入地址</div>
+              <div class="text-mixer-muted mb-1">Transfer to Address</div>
               <div class="font-mono text-white break-all">{{ withdrawForm.address }}</div>
             </div>
           </div>
           
           <div class="flex gap-3">
             <button @click="closeModal" class="tornado-button-secondary flex-1">
-              取消
+              Cancel
             </button>
             <button @click="confirmWithdraw" class="tornado-button-danger flex-1">
-              确认提取
+              Confirm Withdrawal
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invalid Transaction Modal -->
+      <div v-if="showInvalidModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click="closeInvalidModal">
+        <div class="bg-mixer-dark border border-red-500 rounded-lg p-6 max-w-md mx-4" @click.stop>
+          <h3 class="text-lg font-semibold mb-4 text-red-400 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+            </svg>
+            Invalid Transaction
+          </h3>
+          
+          <div class="space-y-4 mb-6">
+            <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+              <div class="text-red-300 text-sm space-y-2">
+                <div><strong>Issue:</strong> {{ invalidInfo.issue }}</div>
+                <div v-if="invalidInfo.note"><strong>Note:</strong> {{ invalidInfo.note }}</div>
+                <div v-if="invalidInfo.amount"><strong>Amount:</strong> {{ invalidInfo.amount }}</div>
+                <div v-if="invalidInfo.address"><strong>Address:</strong> {{ invalidInfo.address }}</div>
+              </div>
+            </div>
+            
+            <div class="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+              <div class="text-blue-300 text-sm">
+                <div class="font-medium mb-2">📋 How to proceed:</div>
+                <ul class="space-y-1 list-disc list-inside">
+                  <li>Verify your transaction note is correct (66 characters, starts with 0x)</li>
+                  <li>Check that the withdrawal amount doesn't exceed your deposit</li>
+                  <li>Ensure the wallet address is valid</li>
+                  <li>Make sure all required fields are filled</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex justify-center">
+            <button @click="closeInvalidModal" class="tornado-button-primary">
+              OK, I'll Fix It
             </button>
           </div>
         </div>
@@ -251,7 +304,9 @@ const isApproving = ref(false)
 const isLending = ref(false)
 const isWithdrawing = ref(false)
 const showConfirmModal = ref(false)
+const showInvalidModal = ref(false) // 添加无效交易提示弹窗状态
 const confirmationInfo = ref({})
+const invalidInfo = ref({}) // 添加无效交易信息
 
 // Forms
 const lendForm = ref({
@@ -392,7 +447,8 @@ const canLend = computed(() => {
 
 const canWithdraw = computed(() => {
   return withdrawForm.value.note && withdrawForm.value.amount && 
-         withdrawForm.value.address && withdrawInfo.value.noteStatus === 'Valid' && 
+         withdrawForm.value.address && withdrawForm.value.address.trim() !== '' &&
+         withdrawInfo.value.noteStatus === 'Valid' && 
          !isWithdrawing.value
 })
 
@@ -427,6 +483,10 @@ async function copyToClipboard(text) {
 
 function setQuickAmount(amount) {
   lendForm.value.amount = amount
+}
+
+function setQuickWithdrawAmount(amount) {
+  withdrawForm.value.amount = amount
 }
 
 function updateAPY() {
@@ -589,55 +649,192 @@ async function lend() {
 async function handleWithdrawClick() {
   if (!canWithdraw.value) return
   
-  // 获取当前记录信息
-  const note = withdrawForm.value.note
-  const amount = Number(withdrawForm.value.amount)
+  // 设置响应检测超时
+  const timeoutId = setTimeout(() => {
+    // 如果3秒内没有显示确认弹窗，显示错误
+    if (!showConfirmModal.value) {
+      invalidInfo.value = {
+        issue: 'Withdraw operation timeout',
+        note: 'The withdraw process did not respond within expected time',
+        amount: '',
+        address: 'Please check your connection and try again, or contact support if the problem persists'
+      }
+      showInvalidModal.value = true
+    }
+  }, 3000)
   
+  try {
+    // 验证交易有效性
+    const validationResult = validateWithdrawTransaction()
+    if (!validationResult.isValid) {
+      clearTimeout(timeoutId)
+      // 显示无效交易弹窗
+      invalidInfo.value = validationResult.error
+      showInvalidModal.value = true
+      return
+    }
+    
+    // 获取当前记录信息
+    const note = withdrawForm.value.note
+    const amount = Number(withdrawForm.value.amount)
+    const record = walletStore.localData.notes[note]
+    const currentTime = now()
+    const lendTime = record.lendTime
+    const interestTime = record.interestTime
+    const elapsedTime = currentTime - lendTime
+    
+    const isEarlyWithdraw = elapsedTime < interestTime
+    const days = elapsedTime / 86400
+    const remainingDays = Math.max(0, (interestTime - elapsedTime) / 86400)
+    
+    // 计算利息预估
+    let aprUsed
+    if (isEarlyWithdraw) {
+      aprUsed = record.baseAPR
+    } else {
+      aprUsed = record.promisedAPR
+    }
+    
+    const daysForCalculation = Math.max(1, Math.ceil(days))
+    const totalInterest = record.amount * aprUsed / 100 * (daysForCalculation / 365)
+    const withdrawRatio = amount / record.amount
+    const estimatedInterest = totalInterest * withdrawRatio
+    
+    // 设置确认信息
+    confirmationInfo.value = {
+      isEarlyWithdraw,
+      lockDays: record.lockDays,
+      remainingDays: formatNumber(remainingDays, 1),
+      promisedAPR: record.promisedAPR,
+      baseAPR: record.baseAPR,
+      token: record.token,
+      estimatedInterest: formatNumber(estimatedInterest, 6),
+      actualDays: formatNumber(days, 1)
+    }
+    
+    // 清除超时检测
+    clearTimeout(timeoutId)
+    showConfirmModal.value = true
+  } catch (error) {
+    clearTimeout(timeoutId)
+    // 如果出现错误，显示错误信息
+    invalidInfo.value = {
+      issue: 'Withdraw operation failed',
+      note: error.message || 'An unexpected error occurred',
+      amount: '',
+      address: 'Please try again or contact support if the problem persists'
+    }
+    showInvalidModal.value = true
+  }
+}
+
+function validateWithdrawTransaction() {
+  const note = withdrawForm.value.note.trim()
+  const amount = Number(withdrawForm.value.amount)
+  const address = withdrawForm.value.address.trim()
+  
+  // 检查note是否为空
+  if (!note) {
+    return {
+      isValid: false,
+      error: {
+        issue: 'Transaction note is required',
+        note: 'Please enter your transaction note to proceed',
+        amount: '',
+        address: ''
+      }
+    }
+  }
+  
+  // 检查note格式
+  if (!note.startsWith('0x') || note.length !== 66) {
+    return {
+      isValid: false,
+      error: {
+        issue: 'Invalid transaction note format',
+        note: `${note} (Length: ${note.length}/66)`,
+        amount: '',
+        address: 'Expected format: 0x followed by 64 hexadecimal characters'
+      }
+    }
+  }
+  
+  // 检查note是否存在于记录中
   if (!walletStore.localData.notes || !walletStore.localData.notes[note]) {
-    notificationStore.error('Invalid Note', 'Transaction note not found or invalid')
-    return
+    return {
+      isValid: false,
+      error: {
+        issue: 'Transaction note not found',
+        note: note,
+        amount: '',
+        address: 'This note does not exist in our records. Please check if you have made a lending transaction with this note.'
+      }
+    }
   }
   
   const record = walletStore.localData.notes[note]
-  const currentTime = now()
-  const lendTime = record.lendTime
-  const interestTime = record.interestTime
-  const elapsedTime = currentTime - lendTime
   
-  const isEarlyWithdraw = elapsedTime < interestTime
-  const days = elapsedTime / 86400
-  const remainingDays = Math.max(0, (interestTime - elapsedTime) / 86400)
-  
-  // 计算利息预估
-  let aprUsed
-  if (isEarlyWithdraw) {
-    aprUsed = record.baseAPR
-  } else {
-    aprUsed = record.promisedAPR
+  // 检查金额是否为空或无效
+  if (!amount || amount <= 0) {
+    return {
+      isValid: false,
+      error: {
+        issue: 'Invalid withdrawal amount',
+        note: '',
+        amount: `${withdrawForm.value.amount} (Must be greater than 0)`,
+        address: ''
+      }
+    }
   }
   
-  const daysForCalculation = Math.max(1, Math.ceil(days))
-  const totalInterest = record.amount * aprUsed / 100 * (daysForCalculation / 365)
-  const withdrawRatio = amount / record.amount
-  const estimatedInterest = totalInterest * withdrawRatio
-  
-  // 设置确认信息
-  confirmationInfo.value = {
-    isEarlyWithdraw,
-    lockDays: record.lockDays,
-    remainingDays: formatNumber(remainingDays, 1),
-    promisedAPR: record.promisedAPR,
-    baseAPR: record.baseAPR,
-    token: record.token,
-    estimatedInterest: formatNumber(estimatedInterest, 6),
-    actualDays: formatNumber(days, 1)
+  // 检查金额是否超出存款
+  if (amount > record.amount) {
+    return {
+      isValid: false,
+      error: {
+        issue: 'Withdrawal amount exceeds deposit',
+        note: '',
+        amount: `Requested: ${amount} ${record.token}, Available: ${record.amount} ${record.token}`,
+        address: ''
+      }
+    }
   }
   
-  showConfirmModal.value = true
+  // 检查地址是否为空
+  if (!address || address.trim() === '') {
+    return {
+      isValid: false,
+      error: {
+        issue: 'Wallet address is required',
+        note: '',
+        amount: '',
+        address: 'Please enter the wallet address where you want to receive the funds'
+      }
+    }
+  }
+  
+  // 检查地址格式
+  if (!address.startsWith('0x') || address.length !== 42) {
+    return {
+      isValid: false,
+      error: {
+        issue: 'Invalid wallet address format',
+        note: '',
+        amount: '',
+        address: `${address} (Length: ${address.length}/42) - Expected format: 0x followed by 40 hexadecimal characters`
+      }
+    }
+  }
+
+  return { isValid: true }
 }
 
 function closeModal() {
   showConfirmModal.value = false
+}
+
+function closeInvalidModal() {
+  showInvalidModal.value = false
 }
 
 async function confirmWithdraw() {
