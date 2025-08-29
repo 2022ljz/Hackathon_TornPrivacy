@@ -25,16 +25,16 @@
         </div>
         
         <div class="balance-amount">
-          {{ formatNumber(walletStore.getLocalBalance(token.sym), 4) }}
+          {{ displayBalance(token.sym) }}
         </div>
-        
+
         <div class="balance-usd">
-          ≈ ${{ formatNumber(walletStore.getLocalBalance(token.sym) * token.price, 2) }}
+          {{ displayUSD(token.sym, token.price) }}
         </div>
         
         <!-- Balance Change Indicator -->
         <div 
-          v-if="balanceChanges[token.sym]" 
+          v-if="(typeof chainBalances[token.sym] === 'number') && balanceChanges[token.sym]" 
           class="balance-change"
           :class="balanceChanges[token.sym].type"
         >
@@ -64,7 +64,7 @@
       <div class="flex items-center justify-between">
         <span class="text-sm text-gray-400">Total Portfolio Value</span>
         <span class="text-2xl font-bold text-green-400">
-          ${{ formatNumber(totalPortfolioValue, 2) }}
+          {{ totalPortfolioValue === null ? '-' : ('$' + formatNumber(totalPortfolioValue, 2)) }}
         </span>
       </div>
     </div>
@@ -82,15 +82,64 @@ const walletStore = useWalletStore()
 const balanceChanges = ref({})
 const previousBalances = ref({})
 
-// Computed total portfolio value
+// Map of on-chain balances fetched from provider: { 'ETH': 1.23, ... }
+const chainBalances = ref({})
+const isLoadingBalances = ref(false)
+
+// Computed total portfolio value using on-chain balances when available, else fallback to local balances
 const totalPortfolioValue = computed(() => {
-  if (!walletStore.isConnected) return 0
-  
-  return walletStore.config.tokens.reduce((total, token) => {
-    const balance = walletStore.getLocalBalance(token.sym)
-    return total + (balance * token.price)
-  }, 0)
+  const tokens = walletStore.config.tokens || []
+  // If any token is missing on-chain balance, return null so UI shows '-'
+  for (const token of tokens) {
+    const sym = token.sym
+    if (typeof chainBalances.value[sym] !== 'number') return null
+  }
+
+  let total = 0
+  for (const token of tokens) {
+    const sym = token.sym
+    const price = token.price || 0
+    const bal = chainBalances.value[sym] || 0
+    total += bal * price
+  }
+  return total
 })
+
+// Helper to format display: show '-' until on-chain value exists
+function displayBalance(sym) {
+  if (!walletStore.isConnected) return '-'
+  const val = chainBalances.value[sym]
+  if (typeof val === 'number') return formatNumber(val, 4)
+  return '-'
+}
+
+function displayUSD(sym, price) {
+  if (!walletStore.isConnected) return '-'
+  const val = chainBalances.value[sym]
+  if (typeof val === 'number' && price) return '≈ $' + formatNumber(val * price, 2)
+  return '-'
+}
+
+// Refresh balances from chain
+async function refreshBalances() {
+  if (!walletStore.config || !walletStore.config.tokens) return
+  isLoadingBalances.value = true
+  try {
+    const tokens = walletStore.config.tokens
+    for (const token of tokens) {
+      try {
+        // walletStore.getBalance returns on-chain balance (uses provider). Fallback to local on error.
+        const val = await walletStore.getBalance(token.sym)
+        chainBalances.value = { ...chainBalances.value, [token.sym]: Number(val) }
+      } catch (err) {
+        // keep previous or local balance
+        console.warn('Failed to fetch on-chain balance for', token.sym, err)
+      }
+    }
+  } finally {
+    isLoadingBalances.value = false
+  }
+}
 
 // Token icons mapping
 function getTokenIcon(symbol) {
@@ -134,9 +183,20 @@ watch(
 
 // Initialize previous balances
 onMounted(() => {
+  // initialize previous balances using local store
   walletStore.config.tokens.forEach(token => {
     previousBalances.value[token.sym] = walletStore.getLocalBalance(token.sym)
   })
+
+  // If already connected, fetch real balances
+  if (walletStore.isConnected) {
+    refreshBalances()
+  }
+})
+
+// Also refresh when wallet connection changes
+watch(() => walletStore.isConnected, (connected) => {
+  if (connected) refreshBalances()
 })
 </script>
 
