@@ -10,6 +10,11 @@
       </div>
     </div>
 
+    <!-- Note about data source -->
+    <div v-if="walletStore.isConnected" class="mb-4 text-sm text-gray-400">
+      显示 "-" 表示正在获取链上数据或该代币未配置链上地址；若显示数字则为链上读取的余额。
+    </div>
+
     <!-- Balance Cards -->
     <div v-if="walletStore.isConnected" class="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div 
@@ -202,7 +207,12 @@ watch(() => walletStore.isConnected, (connected) => {
 
 <style scoped>
 .balance-card {
-  @apply bg-gray-800 p-4 rounded-xl border border-gray-600 relative overflow-hidden;
+  background-color: #1f2937; /* bg-gray-800 */
+  padding: 1rem; /* p-4 */
+  border-radius: 0.75rem; /* rounded-xl */
+  border: 1px solid #4b5563; /* border-gray-600 */
+  position: relative; /* relative */
+  overflow: hidden; /* overflow-hidden */
   transition: all 0.3s ease;
 }
 
