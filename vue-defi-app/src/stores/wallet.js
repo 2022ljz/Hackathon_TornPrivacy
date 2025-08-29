@@ -36,10 +36,10 @@ export const useWalletStore = defineStore('wallet', () => {
         notes: {},
         stakeNotes: {},  // 新增stake notes存储
         balance: {
-            ETH: 1000,
-            DAI: 1000,
-            USDC: 1000,
-            WBTC: 1000
+            ETH: 0,
+            DAI: 0,
+            USDC: 0,
+            WBTC: 0
         }
     })
 
@@ -112,7 +112,28 @@ export const useWalletStore = defineStore('wallet', () => {
 
         try {
             logConnectionAttempt('请求账户权限')
-            // Request accounts first with timeout
+            // 务必强制打开 MetaMask 确认弹窗：先尝试 wallet_requestPermissions（若可用）
+            try {
+                if (window.ethereum && typeof window.ethereum.request === 'function') {
+                    try {
+                        logConnectionAttempt('尝试使用 wallet_requestPermissions 强制弹窗')
+                        // requestPermissions 会触发钱包 UI，让用户再次确认权限
+                        await window.ethereum.request({
+                            method: 'wallet_requestPermissions',
+                            params: [{ eth_accounts: {} }]
+                        })
+                        logConnectionAttempt('wallet_requestPermissions 请求已发送')
+                    } catch (permErr) {
+                        // 某些提供者或旧版 MetaMask 可能不支持该方法；记录但不阻止后续请求
+                        logConnectionAttempt('wallet_requestPermissions 失败，回退到 eth_requestAccounts', null, permErr)
+                    }
+                }
+            } catch (err) {
+                // 保守处理，继续向下执行
+                logConnectionAttempt('尝试强制弹窗时发生异常，继续执行 eth_requestAccounts', null, err)
+            }
+
+            // Request accounts with timeout (保留原有超时逻辑)
             const accounts = await Promise.race([
                 window.ethereum.request({
                     method: 'eth_requestAccounts'
@@ -225,7 +246,8 @@ export const useWalletStore = defineStore('wallet', () => {
 
     async function getTokenContract(symbol) {
         const token = config.value.tokens.find(t => t.sym === symbol)
-        if (!token || !token.addr || token.addr.toLowerCase() === "eth") return null
+    if (!token || !token.addr) return null
+    if (token.addr.toLowerCase() === "eth") return null
         if (!signer.value) return null
         return new ethers.Contract(token.addr, abis.erc20, signer.value)
     }
@@ -239,14 +261,34 @@ export const useWalletStore = defineStore('wallet', () => {
         try {
             let walletBalance = 0
 
-            if (token.addr === "eth" || !token.addr) {
-                const balance = await provider.value.getBalance(address.value)
-                walletBalance = Number(ethers.utils.formatUnits(balance, 18))
-            } else {
+            // Only treat as ETH when addr explicitly equals 'eth' (case-insensitive)
+            const isEth = token.addr && String(token.addr).toLowerCase() === 'eth'
+            if (isEth) {
+                // provider.getBalance sometimes lives on provider.value or provider.value.provider
+                const getBalFn = (provider.value && provider.value.getBalance) ? provider.value.getBalance.bind(provider.value) :
+                    (provider.value && provider.value.provider && provider.value.provider.getBalance) ? provider.value.provider.getBalance.bind(provider.value.provider) : null
+                if (!getBalFn) {
+                    console.warn('Provider does not expose getBalance, cannot read ETH balance')
+                    walletBalance = 0
+                } else {
+                    const raw = await getBalFn(address.value)
+                    console.debug('getBalance ETH raw', raw)
+                    walletBalance = Number(ethers.utils.formatUnits(raw, 18))
+                }
+            } else if (token.addr) {
+                // ERC20 token with provided address
                 const contract = await getTokenContract(symbol)
-                if (!contract) return 0
-                const balance = await contract.balanceOf(address.value)
-                walletBalance = Number(ethers.utils.formatUnits(balance, token.decimals))
+                if (!contract) {
+                    console.warn(`No contract available for ${symbol}, falling back to local balance`)
+                    walletBalance = localData.value.balance[symbol] || 0
+                } else {
+                    const balance = await contract.balanceOf(address.value)
+                    console.debug(`getBalance ${symbol} raw`, balance)
+                    walletBalance = Number(ethers.utils.formatUnits(balance, token.decimals))
+                }
+            } else {
+                // No on-chain address configured: use local demo balance
+                walletBalance = localData.value.balance[symbol] || 0
             }
 
             // 添加借款余额（如果有的话）
@@ -276,21 +318,21 @@ export const useWalletStore = defineStore('wallet', () => {
                 // 确保 balance 字段存在并初始化
                 if (!parsed.balance) {
                     parsed.balance = {
-                        ETH: 1000,
-                        DAI: 1000,
-                        USDC: 1000,
-                        WBTC: 1000
+                        ETH: 0,
+                        DAI: 0,
+                        USDC: 0,
+                        WBTC: 0
                     }
                 }
                 Object.assign(localData.value, parsed)
                 console.log('📂 Loaded persisted data:', localData.value)
             } else {
-                // 如果没有保存的数据，初始化balance
+                // 如果没有保存的数据，初始化balance为 0（避免误导性的示例余额）
                 localData.value.balance = {
-                    ETH: 1000,
-                    DAI: 1000,
-                    USDC: 1000,
-                    WBTC: 1000
+                    ETH: 0,
+                    DAI: 0,
+                    USDC: 0,
+                    WBTC: 0
                 }
             }
         } catch (error) {
@@ -331,10 +373,10 @@ export const useWalletStore = defineStore('wallet', () => {
                 notes: {},
                 stakeNotes: {},
                 balance: {
-                    ETH: 1000,
-                    DAI: 1000,
-                    USDC: 1000,
-                    WBTC: 1000
+                    ETH: 0,
+                    DAI: 0,
+                    USDC: 0,
+                    WBTC: 0
                 }
             }
 
