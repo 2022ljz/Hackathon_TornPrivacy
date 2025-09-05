@@ -1,0 +1,193 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "D:\\Program Files\\Microsoft VS Code\\qzr_code\\Hackathon_TornPrivacy-main\\backend-sepolia\\contracts\\CollateralManager.sol": {
+      "lastModificationDate": 1757015056200,
+      "contentHash": "7977c386357561fec7ce35951860b7c9",
+      "sourceName": "contracts/CollateralManager.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./Mixer.sol",
+        "./LendingPool.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "CollateralManager"
+      ]
+    },
+    "D:\\Program Files\\Microsoft VS Code\\qzr_code\\Hackathon_TornPrivacy-main\\backend-sepolia\\contracts\\Mixer.sol": {
+      "lastModificationDate": 1757015024028,
+      "contentHash": "0aa00f75f05c18b5cd448cef9de46157",
+      "sourceName": "contracts/Mixer.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "Mixer"
+      ]
+    },
+    "D:\\Program Files\\Microsoft VS Code\\qzr_code\\Hackathon_TornPrivacy-main\\backend-sepolia\\contracts\\LendingPool.sol": {
+      "lastModificationDate": 1757015036414,
+      "contentHash": "096aa683ef41f054c347a6114371b5a0",
+      "sourceName": "contracts/LendingPool.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "LendingPool"
+      ]
+    },
+    "D:\\Program Files\\Microsoft VS Code\\qzr_code\\Hackathon_TornPrivacy-main\\backend-sepolia\\contracts\\IERC20.sol": {
+      "lastModificationDate": 1757015069888,
+      "contentHash": "e941d245d57d5db5445bc084c5876408",
+      "sourceName": "contracts/IERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IERC20",
+        "SafeERC20Lite"
+      ]
+    },
+    "D:\\Program Files\\Microsoft VS Code\\qzr_code\\Hackathon_TornPrivacy-main\\backend-sepolia\\contracts\\ERC20Mock.sol": {
+      "lastModificationDate": 1757015002180,
+      "contentHash": "4c4fabefc57c4fa1566de639b9bce83a",
+      "sourceName": "contracts/ERC20Mock.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ERC20Mock"
+      ]
+    }
+  }
+}

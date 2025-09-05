@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CSS Variables inspired by Tornado Cash */
+:root {
+    --tornado-primary: #22c55e;
+    --tornado-secondary: #16a34a;
+    --tornado-dark: #0f172a;
+    --tornado-light: #f8fafc;
+    --mixer-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+
+/* Base Styles */
+@layer base {
+    html {
+        scroll-behavior: smooth;
+    }
+
+    body {
+        background: radial-gradient(1200px 600px at 20% -10%, #10212b 0%, rgba(16, 22, 27, 0) 60%), #0b0f12;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.4;
+    }
+}
+
+/* Component Styles */
+@layer components {
+    .tornado-panel {
+        @apply bg-gradient-to-b from-white/[0.015] to-black/35 backdrop-blur-sm;
+        @apply border border-mixer-border rounded-2xl p-6;
+        @apply shadow-mixer;
+        background-color: #10161b;
+    }
+
+    .tornado-button {
+        @apply px-4 py-3 rounded-xl border font-bold;
+        @apply inline-flex items-center justify-center gap-2;
+        @apply transition-all duration-300 ease-in-out;
+        @apply hover:scale-105 active:scale-95;
+    }
+
+    .tornado-button-primary {
+        @apply tornado-button;
+        @apply border-green-700/50 bg-gradient-to-b from-green-400/20 to-green-400/5;
+        @apply text-green-100 hover:from-green-400/30 hover:to-green-400/10;
+        @apply shadow-lg hover:shadow-green-500/25;
+    }
+
+    .tornado-button-secondary {
+        @apply tornado-button;
+        @apply border-blue-700/50 bg-gradient-to-b from-blue-400/20 to-blue-400/5;
+        @apply text-blue-100 hover:from-blue-400/30 hover:to-blue-400/10;
+        @apply shadow-lg hover:shadow-blue-500/25;
+    }
+
+    .tornado-button-danger {
+        @apply tornado-button;
+        @apply border-red-700/50 bg-gradient-to-b from-red-400/20 to-red-400/5;
+        @apply text-red-100 hover:from-red-400/30 hover:to-red-400/10;
+        @apply shadow-lg hover:shadow-red-500/25;
+    }
+
+    .tornado-input {
+        @apply w-full px-4 py-3 rounded-xl border border-mixer-border;
+        @apply bg-mixer-card text-mixer-txt outline-none;
+        @apply transition-all duration-300;
+        @apply focus:border-green-500/50 focus:ring-2 focus:ring-green-500/20;
+        @apply placeholder:text-mixer-muted;
+    }
+
+    .tornado-tab {
+        @apply cursor-pointer px-4 py-2 rounded-xl border border-mixer-border;
+        @apply text-mixer-muted bg-mixer-panel-2 transition-all duration-300;
+        @apply hover:border-green-600/30 hover:text-green-400;
+    }
+
+    .tornado-tab.active {
+        @apply border-green-700/50 text-green-400;
+        @apply bg-gradient-to-b from-green-400/20 to-green-400/5;
+        background-color: #0b1511;
+    }
+
+    .tornado-chip {
+        @apply px-3 py-2 border border-mixer-border rounded-lg;
+        @apply text-mixer-muted cursor-pointer bg-mixer-card;
+        @apply transition-all duration-300 hover:border-green-600/30;
+    }
+
+    .tornado-chip.active {
+        @apply border-green-700/50 text-green-300 bg-green-950/50;
+    }
+
+    .stat-card {
+        @apply p-4 border border-mixer-border rounded-xl bg-mixer-card;
+        @apply transition-all duration-300 hover:border-green-600/30;
+    }
+
+    .market-row {
+        @apply bg-gradient-to-b from-white/[0.015] to-black/25 bg-mixer-card;
+        @apply transition-all duration-300 hover:bg-mixer-panel;
+    }
+
+    .tornado-logo {
+        @apply w-9 h-9 rounded-lg;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        @apply animate-pulse-slow;
+    }
+
+    .privacy-indicator {
+        @apply inline-flex items-center gap-2 px-3 py-1 rounded-full;
+        @apply bg-green-950/50 border border-green-800/50 text-green-300;
+        @apply text-xs font-medium;
+    }
+
+    .connection-status {
+        @apply px-3 py-1 border border-mixer-border rounded-full;
+        @apply text-mixer-muted bg-gradient-to-b from-white/[0.02] to-black/35;
+        @apply shadow-mixer text-sm;
+    }
+}
+
+/* Utilities */
+@layer utilities {
+    .animate-tornado {
+        animation: tornadoSpin 20s linear infinite;
+    }
+
+    .animate-float {
+        animation: float 6s ease-in-out infinite;
+    }
+
+    .glass-effect {
+        backdrop-filter: blur(12px);
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0e1419;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #22c55e;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #16a34a;
+}
+
+/* Loading Animation */
+.loading-spinner {
+    @apply inline-block w-5 h-5 border-2 border-green-600 border-t-transparent rounded-full animate-spin;
+}

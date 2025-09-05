@@ -1,0 +1,17 @@
+{
+  "name": "tornprivacy-backend-sepolia",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "hardhat compile",
+    "deploy:mocks": "hardhat run scripts/01_deploy_mocks.js --network sepolia",
+    "deploy:core": "hardhat run scripts/02_deploy_core.js --network sepolia",
+    "fund": "hardhat run scripts/03_fund_pool.js --network sepolia",
+    "export:abis": "hardhat run scripts/99_export_abis.js"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.8"
+  }
+}
