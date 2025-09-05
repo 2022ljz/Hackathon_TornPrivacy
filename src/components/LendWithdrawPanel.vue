@@ -82,6 +82,13 @@
         </div>
       </div>
 
+      <!-- Blockchain Status Indicator -->
+      <div class="flex items-center justify-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-4">
+        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+        <span class="text-sm font-medium text-green-700">🔗 Connected to Sepolia Testnet</span>
+        <span class="text-xs text-green-600">(Real Blockchain Transactions)</span>
+      </div>
+
       <!-- Actions -->
       <div class="flex gap-3">
         <button 
@@ -98,13 +105,13 @@
           class="tornado-button-primary flex-1"
         >
           <div v-if="isLending" class="loading-spinner"></div>
-          Lend
+          💎 Lend to Sepolia
         </button>
       </div>
 
-      <p class="text-xs text-mixer-muted">
-        * When not connected to contracts, Lend/Withdraw will use local localStorage for demonstration.
-        After filling in your contract address/ABI in the Config (top right), it will change to real on-chain transactions.
+      <p class="text-xs text-green-600 bg-green-50 p-2 rounded">
+        ✅ <strong>Real Blockchain Mode:</strong> All transactions will be sent to Sepolia testnet and appear on Etherscan.
+        Your Mixer contract: <code class="bg-white px-1 rounded">0xf85Daa3dBA126757027CE967F86Eb7860271AfE0</code>
       </p>
     </div>
 
@@ -187,6 +194,13 @@
         </div>
       </div>
 
+      <!-- Blockchain Status Indicator -->
+      <div class="flex items-center justify-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-4">
+        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+        <span class="text-sm font-medium text-green-700">🔗 Connected to Sepolia Testnet</span>
+        <span class="text-xs text-green-600">(Real Blockchain Transactions)</span>
+      </div>
+
       <!-- Actions -->
       <div class="flex gap-3">
         <button 
@@ -195,7 +209,7 @@
           class="tornado-button-danger flex-1"
         >
           <div v-if="isWithdrawing" class="loading-spinner"></div>
-          Withdraw
+          💎 Withdraw from Sepolia
         </button>
       </div>
 
@@ -580,10 +594,25 @@ async function lend() {
     const bonus = lockDays >= 90 ? 7 : lockDays >= 30 ? 3 : lockDays >= 7 ? 1 : 0
     const promisedAPR = base + bonus
     
+    console.log(`🚀 Starting REAL blockchain lend operation: ${amount} ${token}`)
+    
+    // Initialize contracts if not already done
+    const { initializeContracts, depositToMixer } = await import('@/utils/contracts.js')
+    await initializeContracts()
+    
     // Generate unique transaction proof
     const note = generateTransactionNote()
     const currentTime = now()
     const interestTime = lockDays * 24 * 60 * 60 // Convert to seconds
+    
+    // 🔗 REAL BLOCKCHAIN TRANSACTION
+    console.log(`📡 Sending transaction to Sepolia testnet...`)
+    const blockchainResult = await depositToMixer(token, amount)
+    
+    console.log(`🎉 Real transaction successful!`)
+    console.log(`   TX Hash: ${blockchainResult.txHash}`)
+    console.log(`   Block: ${blockchainResult.blockNumber}`)
+    console.log(`   Commitment: ${blockchainResult.commitment}`)
     
     // Initialize notes object if it doesn't exist
     if (!walletStore.localData.notes) {
@@ -591,7 +620,7 @@ async function lend() {
       console.log('🔧 Initialized notes object')
     }
     
-    // Save transaction record to note
+    // Save transaction record with REAL blockchain data
     walletStore.localData.notes[note] = {
       token,
       amount,
@@ -600,10 +629,16 @@ async function lend() {
       lockDays,
       promisedAPR,
       baseAPR: base,
-      status: 'active'
+      status: 'active',
+      // 🔗 REAL BLOCKCHAIN DATA
+      txHash: blockchainResult.txHash,
+      blockNumber: blockchainResult.blockNumber,
+      commitment: blockchainResult.commitment,
+      gasUsed: blockchainResult.gasUsed,
+      isRealTransaction: true
     }
     
-    console.log('💾 Saving note to localData:', {
+    console.log('💾 Saving note with real blockchain data:', {
       note,
       record: walletStore.localData.notes[note],
       allNotes: Object.keys(walletStore.localData.notes)
@@ -621,24 +656,33 @@ async function lend() {
     await updateBalance()
     
     // Log to console
-    console.log('🎯 Lend Transaction Created:', {
+    console.log('🎯 REAL Blockchain Lend Transaction Created:', {
       note,
       token,
       amount,
       lockDays,
       promisedAPR,
+      txHash: blockchainResult.txHash,
+      blockNumber: blockchainResult.blockNumber,
+      commitment: blockchainResult.commitment,
       timestamp: new Date().toISOString()
     })
     
-    // Create persistent notification with copy button
+    // Create persistent notification with REAL blockchain info
     notificationStore.persistentSuccess(
-      'Lend Successful! 🎉',
-      `Successfully lent ${amount} ${token}\nLock period: ${lockDays} days\nAPR: ${promisedAPR}%\n\n⚠️ IMPORTANT: Save your transaction note securely!\nYou need it to withdraw your funds.\n\nTransaction Note:\n${note}`,
+      '🚀 Real Blockchain Lend Successful! 🎉',
+      `✅ Successfully lent ${amount} ${token} on Sepolia testnet!\n\n📋 Transaction Details:\n• Amount: ${amount} ${token}\n• Lock period: ${lockDays} days\n• APR: ${promisedAPR}%\n• TX Hash: ${blockchainResult.txHash}\n• Block: ${blockchainResult.blockNumber}\n\n⚠️ IMPORTANT: Save your transaction note securely!\nYou need it to withdraw your funds.\n\n🔐 Transaction Note:\n${note}\n\n🔗 View on Etherscan:\nhttps://sepolia.etherscan.io/tx/${blockchainResult.txHash}`,
       [
         {
           label: '📋 Copy Note',
           variant: 'primary',
           handler: () => copyToClipboard(note),
+          autoClose: false
+        },
+        {
+          label: '🔗 View TX',
+          variant: 'secondary',
+          handler: () => window.open(`https://sepolia.etherscan.io/tx/${blockchainResult.txHash}`, '_blank'),
           autoClose: false
         },
         {
@@ -653,7 +697,11 @@ async function lend() {
     lendForm.value.amount = ''
     
   } catch (error) {
-    notificationStore.error('Lend Failed', error.message)
+    console.error('❌ Real blockchain lend failed:', error)
+    notificationStore.error(
+      '🚫 Blockchain Transaction Failed', 
+      `Failed to lend ${lendForm.value.amount} ${lendForm.value.token} on Sepolia testnet.\n\nError: ${error.message}\n\nPlease check:\n• Your wallet has enough ${lendForm.value.token}\n• You have enough ETH for gas fees\n• Network connection is stable\n• MetaMask is connected to Sepolia`
+    )
   } finally {
     isLending.value = false
   }

@@ -40,8 +40,8 @@
       ]
     },
     "/Users/gigg1ty/Documents/GitHub/Hackthon_TornPrivacy/Contracts/Mixer.sol": {
-      "lastModificationDate": 1757066579917,
-      "contentHash": "944bc94f6e9f9b6660daf62b9bdf5163",
+      "lastModificationDate": 1757070204755,
+      "contentHash": "cd5004365ec68cbae0957924190b03e0",
       "sourceName": "Contracts/Mixer.sol",
       "solcConfig": {
         "version": "0.8.17",

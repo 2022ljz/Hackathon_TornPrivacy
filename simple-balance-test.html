@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Balance Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.8.0/dist/ethers.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background: #2a2a2a;
+        }
+
+        .success {
+            background: #2a4a2a;
+        }
+
+        .error {
+            background: #4a2a2a;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background: #4a5568;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #5a6578;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🧪 Simple Balance Test</h1>
+    <p>This page tests balance retrieval without Vue/Pinia complexity</p>
+
+    <button onclick="testConnection()">1. Test Connection</button>
+    <button onclick="testEthBalance()">2. Test ETH Balance</button>
+    <button onclick="testTokenBalance()">3. Test Token Balance</button>
+    <button onclick="clearResults()">Clear Results</button>
+
+    <div id="results"></div>
+
+    <script>
+        let connected = false;
+        let userAddress = null;
+
+        function addResult(message, isSuccess = true) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${isSuccess ? 'success' : 'error'}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            results.appendChild(div);
+            console.log(message);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testConnection() {
+            try {
+                addResult('🔗 Testing wallet connection...');
+
+                if (!window.ethereum) {
+                    throw new Error('MetaMask not found');
+                }
+
+                // Request accounts
+                const accounts = await window.ethereum.request({
+                    method: 'eth_requestAccounts'
+                });
+
+                if (accounts.length === 0) {
+                    throw new Error('No accounts found');
+                }
+
+                userAddress = accounts[0];
+                connected = true;
+
+                addResult(`✅ Connected to wallet: ${userAddress}`);
+
+                // Test network
+                const chainIdHex = await window.ethereum.request({
+                    method: 'eth_chainId'
+                });
+                const chainId = parseInt(chainIdHex, 16);
+                addResult(`✅ Network: Chain ID ${chainId} ${chainId === 11155111 ? '(Sepolia)' : ''}`);
+
+                return true;
+            } catch (error) {
+                addResult(`❌ Connection failed: ${error.message}`, false);
+                return false;
+            }
+        }
+
+        async function testEthBalance() {
+            if (!connected || !userAddress) {
+                addResult('❌ Please connect wallet first', false);
+                return;
+            }
+
+            try {
+                addResult('💰 Testing ETH balance retrieval...');
+
+                // Method 1: Direct eth_getBalance call
+                const balanceHex = await window.ethereum.request({
+                    method: 'eth_getBalance',
+                    params: [userAddress, 'latest']
+                });
+
+                const balance = ethers.getBigInt(balanceHex);
+                const formatted = ethers.formatEther(balance);
+
+                addResult(`✅ ETH Balance: ${formatted} ETH`);
+                addResult(`✅ Raw balance: ${balance.toString()} wei`);
+
+                return formatted;
+            } catch (error) {
+                addResult(`❌ ETH balance failed: ${error.message}`, false);
+                return null;
+            }
+        }
+
+        async function testTokenBalance() {
+            if (!connected || !userAddress) {
+                addResult('❌ Please connect wallet first', false);
+                return;
+            }
+
+            try {
+                addResult('🪙 Testing token balance (USDC)...');
+
+                // USDC contract on Sepolia from your config
+                const usdcAddress = '0xCB3A2E90568471eeD7b191AC45747e83bEE6642A';
+
+                // Construct balanceOf call
+                const balanceOfSignature = '0x70a08231'; // balanceOf(address)
+                const paddedAddress = userAddress.slice(2).padStart(64, '0');
+                const callData = balanceOfSignature + paddedAddress;
+
+                const result = await window.ethereum.request({
+                    method: 'eth_call',
+                    params: [{
+                        to: usdcAddress,
+                        data: callData
+                    }, 'latest']
+                });
+
+                if (result && result !== '0x') {
+                    const balance = ethers.getBigInt(result);
+                    const formatted = ethers.formatUnits(balance, 6); // USDC has 6 decimals
+                    addResult(`✅ USDC Balance: ${formatted} USDC`);
+                } else {
+                    addResult(`ℹ️ USDC Balance: 0 USDC (or contract call failed)`);
+                }
+
+                return result;
+            } catch (error) {
+                addResult(`❌ Token balance failed: ${error.message}`, false);
+                return null;
+            }
+        }
+
+        // Auto-run on page load
+        window.addEventListener('load', () => {
+            addResult('🚀 Page loaded. Click "Test Connection" to begin.');
+        });
+    </script>
+</body>
+
+</html>

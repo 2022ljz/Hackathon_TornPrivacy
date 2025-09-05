@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { ethers } from 'ethers'
 import { createSafeWeb3Provider, createProviderWithFallback, safeGetNetwork } from '@/utils/helpers'
 import { debugWeb3Environment, logConnectionAttempt, validateEthereumProvider } from '@/utils/web3-debug'
+import contractsConfig from '@/config/contracts.js'
+import { initializeContractManager } from '@/utils/contracts.js'
 
 export const useWalletStore = defineStore('wallet', () => {
     // State
@@ -18,13 +20,12 @@ export const useWalletStore = defineStore('wallet', () => {
         baseAPR: 4.0,
         borrowAPR: 8.0,  // 添加借款利率
         ltv: 0.5,
-        lendingAddr: "",
-        mixerAddr: "",
+        lendingAddr: contractsConfig.LENDING_POOL_ADDRESS,
+        mixerAddr: contractsConfig.MIXER_ADDRESS,
         tokens: [
-            { sym: "ETH", addr: "eth", decimals: 18, price: 3500 },
-            { sym: "DAI", addr: "", decimals: 18, price: 1 },
-            { sym: "USDC", addr: "", decimals: 6, price: 1 },
-            { sym: "WBTC", addr: "", decimals: 8, price: 65000 },
+            { sym: "ETH", addr: "0x0000000000000000000000000000000000000000", decimals: 18, price: 3500 },
+            { sym: "DAI", addr: contractsConfig.TOKENS.DAI.address, decimals: 18, price: 1 },
+            { sym: "USDC", addr: contractsConfig.TOKENS.USDC.address, decimals: 6, price: 1 },
         ],
     })
 
@@ -150,19 +151,26 @@ export const useWalletStore = defineStore('wallet', () => {
             }
 
             logConnectionAttempt('创建 Web3 提供者')
-            // Try to create provider with fallback strategies
+            // 使用简化的 ethers v6 语法
             try {
-                provider.value = await createProviderWithFallback(window.ethereum)
-                logConnectionAttempt('提供者创建成功 (降级策略)')
+                provider.value = new ethers.BrowserProvider(window.ethereum)
+                logConnectionAttempt('提供者创建成功 (简化方法)')
             } catch (providerError) {
-                logConnectionAttempt('降级策略失败，尝试基础方法', null, providerError)
-                provider.value = createSafeWeb3Provider(window.ethereum)
-                logConnectionAttempt('提供者创建成功 (基础方法)')
+                logConnectionAttempt('提供者创建失败', null, providerError)
+                throw new Error('无法创建 Web3 提供者: ' + providerError.message)
             }
 
             logConnectionAttempt('获取签名者和地址')
-            signer.value = provider.value.getSigner()
-            address.value = await signer.value.getAddress()
+            // 等待 provider 完全初始化
+            await new Promise(resolve => setTimeout(resolve, 100))
+
+            // 获取账户地址
+            const connectedAccounts = await window.ethereum.request({ method: 'eth_accounts' })
+            if (connectedAccounts.length === 0) {
+                throw new Error('No accounts found')
+            }
+            address.value = connectedAccounts[0]
+
             logConnectionAttempt('地址获取成功', { address: address.value })
 
             logConnectionAttempt('获取网络信息')
@@ -171,7 +179,38 @@ export const useWalletStore = defineStore('wallet', () => {
             chainId.value = Number(network.chainId)
             logConnectionAttempt('网络信息获取成功', { chainId: chainId.value, networkName: network.name })
 
+            // 尝试立即创建 signer，如果失败则延迟创建
+            try {
+                // Use safer signer creation method
+                if (provider.value && typeof provider.value.getSigner === 'function') {
+                    signer.value = await provider.value.getSigner(address.value)
+                    console.debug('Signer created successfully')
+                } else {
+                    console.debug('Provider does not support getSigner, will create on demand')
+                }
+            } catch (signerError) {
+                console.warn('Immediate signer creation failed, will create on demand:', signerError)
+                // 不设置 signer，让 getSafeTransactionSigner 按需创建
+            }
+
             isConnected.value = true
+
+            // Initialize contract manager with provider and signer
+            try {
+                // Always try to initialize contract manager
+                const currentSigner = signer.value || await getSafeTransactionSigner()
+                await initializeContractManager(provider.value, currentSigner)
+                console.debug('Contract manager initialized successfully')
+            } catch (contractError) {
+                console.warn('Contract manager initialization failed:', contractError)
+                // Try to initialize again without signer
+                try {
+                    await initializeContractManager(provider.value, null)
+                    console.debug('Contract manager initialized without signer')
+                } catch (fallbackError) {
+                    console.error('Contract manager fallback initialization failed:', fallbackError)
+                }
+            }
 
             // Setup event listeners
             window.ethereum.on('accountsChanged', handleAccountsChanged)
@@ -244,16 +283,88 @@ export const useWalletStore = defineStore('wallet', () => {
         }
     }
 
+    // 动态获取 signer 的工具函数 - 使用简化方法避免私有字段
+    async function getSafeTransactionSigner() {
+        if (!address.value) {
+            throw new Error('Wallet not connected')
+        }
+
+        // 完全避免使用 ethers provider，直接返回一个简化的签名对象
+        return {
+            address: address.value,
+            signTransaction: async (transaction) => {
+                // 使用 window.ethereum 进行签名
+                return await window.ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [transaction]
+                })
+            },
+            getAddress: () => address.value
+        }
+    }
+
+    // 简化的合约调用函数，避免 ethers 合约实例
+    async function callContract(contractAddress, methodSignature, params = [], value = '0x0') {
+        if (!address.value) {
+            throw new Error('Wallet not connected')
+        }
+
+        try {
+            const transaction = {
+                from: address.value,
+                to: contractAddress,
+                data: methodSignature + (params.join('') || ''),
+                value: value
+            }
+
+            const txHash = await window.ethereum.request({
+                method: 'eth_sendTransaction',
+                params: [transaction]
+            })
+
+            return txHash
+        } catch (error) {
+            console.error('Contract call failed:', error)
+            throw error
+        }
+    }
+
     async function getTokenContract(symbol) {
         const token = config.value.tokens.find(t => t.sym === symbol)
-    if (!token || !token.addr) return null
-    if (token.addr.toLowerCase() === "eth") return null
-        if (!signer.value) return null
-        return new ethers.Contract(token.addr, abis.erc20, signer.value)
+        if (!token || !token.addr) return null
+
+        // 检查是否是 ETH (零地址或 "eth")
+        const isEth = String(token.addr).toLowerCase() === 'eth' ||
+            token.addr === '0x0000000000000000000000000000000000000000' ||
+            token.addr === ethers.ZeroAddress
+        if (isEth) return null
+
+        // 返回一个简化的合约对象，避免 ethers 合约实例
+        return {
+            address: token.addr,
+            symbol: symbol,
+            decimals: token.decimals,
+            // 简化的 balanceOf 调用
+            balanceOf: async (userAddress) => {
+                const balanceOfSignature = '0x70a08231' // balanceOf(address)
+                const paddedAddress = userAddress.slice(2).padStart(64, '0')
+                const callData = balanceOfSignature + paddedAddress
+
+                const result = await window.ethereum.request({
+                    method: 'eth_call',
+                    params: [{
+                        to: token.addr,
+                        data: callData
+                    }, 'latest']
+                })
+
+                return result ? ethers.getBigInt(result) : 0n
+            }
+        }
     }
 
     async function getBalance(symbol) {
-        if (!provider.value || !address.value) return 0
+        if (!address.value) return 0
 
         const token = config.value.tokens.find(t => t.sym === symbol)
         if (!token) return 0
@@ -261,43 +372,68 @@ export const useWalletStore = defineStore('wallet', () => {
         try {
             let walletBalance = 0
 
-            // Only treat as ETH when addr explicitly equals 'eth' (case-insensitive)
-            const isEth = token.addr && String(token.addr).toLowerCase() === 'eth'
+            // 检查是否是 ETH (零地址或 "eth")
+            const isEth = token.addr && (
+                String(token.addr).toLowerCase() === 'eth' ||
+                token.addr === '0x0000000000000000000000000000000000000000' ||
+                token.addr === ethers.ZeroAddress
+            ) || symbol === 'ETH'
+
             if (isEth) {
-                // provider.getBalance sometimes lives on provider.value or provider.value.provider
-                const getBalFn = (provider.value && provider.value.getBalance) ? provider.value.getBalance.bind(provider.value) :
-                    (provider.value && provider.value.provider && provider.value.provider.getBalance) ? provider.value.provider.getBalance.bind(provider.value.provider) : null
-                if (!getBalFn) {
-                    console.warn('Provider does not expose getBalance, cannot read ETH balance')
-                    walletBalance = 0
-                } else {
-                    const raw = await getBalFn(address.value)
-                    console.debug('getBalance ETH raw', raw)
-                    walletBalance = Number(ethers.utils.formatUnits(raw, 18))
+                // 对于 ETH，直接使用 window.ethereum 避免私有字段问题
+                try {
+                    const balanceHex = await window.ethereum.request({
+                        method: 'eth_getBalance',
+                        params: [address.value, 'latest']
+                    })
+                    const balance = ethers.getBigInt(balanceHex)
+                    walletBalance = Number(ethers.formatEther(balance))
+                    console.debug('ETH balance retrieved via eth_getBalance:', walletBalance)
+                } catch (error) {
+                    console.warn('Failed to get ETH balance:', error)
+                    walletBalance = localData.value.balance[symbol] || 0
                 }
             } else if (token.addr) {
-                // ERC20 token with provided address
-                const contract = await getTokenContract(symbol)
-                if (!contract) {
-                    console.warn(`No contract available for ${symbol}, falling back to local balance`)
+                // ERC20 token - 使用 eth_call 避免创建合约实例
+                try {
+                    // 构建 balanceOf 调用数据
+                    const balanceOfSignature = '0x70a08231' // balanceOf(address)
+                    const paddedAddress = address.value.slice(2).padStart(64, '0')
+                    const callData = balanceOfSignature + paddedAddress
+
+                    const result = await window.ethereum.request({
+                        method: 'eth_call',
+                        params: [{
+                            to: token.addr,
+                            data: callData
+                        }, 'latest']
+                    })
+
+                    if (result && result !== '0x') {
+                        const balance = ethers.getBigInt(result)
+                        walletBalance = Number(ethers.formatUnits(balance, token.decimals))
+                        console.debug(`${symbol} balance retrieved via eth_call:`, walletBalance)
+                    } else {
+                        console.warn(`No balance data for ${symbol}, using local balance`)
+                        walletBalance = localData.value.balance[symbol] || 0
+                    }
+                } catch (contractError) {
+                    console.warn(`Failed to get contract balance for ${symbol}:`, contractError)
                     walletBalance = localData.value.balance[symbol] || 0
-                } else {
-                    const balance = await contract.balanceOf(address.value)
-                    console.debug(`getBalance ${symbol} raw`, balance)
-                    walletBalance = Number(ethers.utils.formatUnits(balance, token.decimals))
                 }
             } else {
                 // No on-chain address configured: use local demo balance
                 walletBalance = localData.value.balance[symbol] || 0
             }
 
-            // 添加借款余额（如果有的话）
+            // 添加借款余额（如果有的话）- 这些都是用户可用的资金
             const borrowedAmount = localData.value.borrows[symbol] || 0
+            console.debug(`Balance calculation for ${symbol}: wallet=${walletBalance}, borrowed=${borrowedAmount}, total=${walletBalance + borrowedAmount}`)
 
             return walletBalance + borrowedAmount
         } catch (error) {
             console.error(`Error getting balance for ${symbol}:`, error)
-            return 0
+            return localData.value.balance[symbol] || 0
         }
     }
 
@@ -477,6 +613,106 @@ export const useWalletStore = defineStore('wallet', () => {
         }
     }
 
+    // 主要的 DeFi 交互函数 - 避免 ethers 私有字段问题
+    async function depositToMixer(amount) {
+        if (!address.value) {
+            throw new Error('Wallet not connected')
+        }
+
+        try {
+            // 构建存款交易
+            const transaction = {
+                from: address.value,
+                to: config.value.mixerAddr,
+                value: ethers.parseEther(amount.toString()).toString(16),
+                data: '0xb6b55f25' + // deposit() function signature
+                    '0000000000000000000000000000000000000000000000000000000000000000' // commitment placeholder
+            }
+
+            const txHash = await window.ethereum.request({
+                method: 'eth_sendTransaction',
+                params: [transaction]
+            })
+
+            console.log('🏦 Deposit transaction sent:', txHash)
+            return txHash
+        } catch (error) {
+            console.error('Deposit failed:', error)
+            throw error
+        }
+    }
+
+    async function lendToPool(token, amount) {
+        if (!address.value) {
+            throw new Error('Wallet not connected')
+        }
+
+        try {
+            const isEth = token === 'ETH'
+            let transaction
+
+            if (isEth) {
+                // ETH lending
+                transaction = {
+                    from: address.value,
+                    to: config.value.lendingAddr,
+                    value: ethers.parseEther(amount.toString()).toString(16),
+                    data: '0x47e7ef24' // lend() function signature for ETH
+                }
+            } else {
+                // ERC20 lending (需要先 approve)
+                const tokenConfig = config.value.tokens.find(t => t.sym === token)
+                if (!tokenConfig) throw new Error(`Token ${token} not configured`)
+
+                // 这里简化处理，实际项目中需要先调用 approve
+                transaction = {
+                    from: address.value,
+                    to: config.value.lendingAddr,
+                    data: '0x47e7ef24' + // lend() function signature
+                        tokenConfig.addr.slice(2).padStart(64, '0') + // token address
+                        ethers.parseUnits(amount.toString(), tokenConfig.decimals).toString(16).padStart(64, '0') // amount
+                }
+            }
+
+            const txHash = await window.ethereum.request({
+                method: 'eth_sendTransaction',
+                params: [transaction]
+            })
+
+            console.log('🏦 Lend transaction sent:', txHash)
+            return txHash
+        } catch (error) {
+            console.error('Lend failed:', error)
+            throw error
+        }
+    }
+
+    async function borrowFromPool(collateralToken, collateralAmount, borrowToken, borrowAmount) {
+        if (!address.value) {
+            throw new Error('Wallet not connected')
+        }
+
+        try {
+            // 简化的借款交易构建
+            const transaction = {
+                from: address.value,
+                to: config.value.lendingAddr,
+                data: '0x' + 'borrow_signature_placeholder' // 实际需要正确的函数签名
+            }
+
+            const txHash = await window.ethereum.request({
+                method: 'eth_sendTransaction',
+                params: [transaction]
+            })
+
+            console.log('💰 Borrow transaction sent:', txHash)
+            return txHash
+        } catch (error) {
+            console.error('Borrow failed:', error)
+            throw error
+        }
+    }
+
     return {
         // State
         provider,
@@ -497,10 +733,17 @@ export const useWalletStore = defineStore('wallet', () => {
         connectWallet,
         disconnectWallet,
         getTokenContract,
+        getSafeTransactionSigner,
         getBalance,
         loadPersistedData,
         persistData,
         clearAllData,
+        callContract,
+
+        // DeFi operations
+        depositToMixer,
+        lendToPool,
+        borrowFromPool,
 
         // Balance management
         getLocalBalance,

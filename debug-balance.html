@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Balance Issue</title>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.8.0/dist/ethers.umd.min.js"></script>
+</head>
+
+<body>
+    <h1>Debug Balance Issue</h1>
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="testBalance()">Test Balance</button>
+    <div id="results"></div>
+
+    <script>
+        let provider = null;
+        let signer = null;
+        let address = null;
+
+        async function testConnection() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Testing connection...</p>';
+
+            try {
+                if (!window.ethereum) {
+                    throw new Error('MetaMask not found');
+                }
+
+                // Request accounts
+                const accounts = await window.ethereum.request({
+                    method: 'eth_requestAccounts'
+                });
+
+                if (accounts.length === 0) {
+                    throw new Error('No accounts found');
+                }
+
+                address = accounts[0];
+                results.innerHTML += `<p>✅ Account: ${address}</p>`;
+
+                // Create provider with ethers v6
+                provider = new ethers.BrowserProvider(window.ethereum);
+                results.innerHTML += `<p>✅ Provider created</p>`;
+
+                // Wait a bit before creating signer
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Create signer
+                signer = await provider.getSigner();
+                results.innerHTML += `<p>✅ Signer created</p>`;
+
+                // Verify address
+                const signerAddress = await signer.getAddress();
+                results.innerHTML += `<p>✅ Signer address: ${signerAddress}</p>`;
+
+                // Get network
+                const network = await provider.getNetwork();
+                results.innerHTML += `<p>✅ Network: ${network.chainId} (${network.name})</p>`;
+
+            } catch (error) {
+                results.innerHTML += `<p>❌ Error: ${error.message}</p>`;
+                console.error('Connection test failed:', error);
+            }
+        }
+
+        async function testBalance() {
+            const results = document.getElementById('results');
+
+            if (!provider || !address) {
+                results.innerHTML += '<p>❌ Please connect first</p>';
+                return;
+            }
+
+            try {
+                results.innerHTML += '<p>Testing balance...</p>';
+
+                // Method 1: Direct provider.getBalance
+                const balance1 = await provider.getBalance(address);
+                const formatted1 = ethers.formatEther(balance1);
+                results.innerHTML += `<p>✅ Method 1 (provider.getBalance): ${formatted1} ETH</p>`;
+
+                // Method 2: Using signer
+                if (signer) {
+                    const balance2 = await provider.getBalance(await signer.getAddress());
+                    const formatted2 = ethers.formatEther(balance2);
+                    results.innerHTML += `<p>✅ Method 2 (via signer): ${formatted2} ETH</p>`;
+                }
+
+                // Method 3: Using window.ethereum directly
+                const balanceHex = await window.ethereum.request({
+                    method: 'eth_getBalance',
+                    params: [address, 'latest']
+                });
+                const balance3 = ethers.getBigInt(balanceHex);
+                const formatted3 = ethers.formatEther(balance3);
+                results.innerHTML += `<p>✅ Method 3 (eth_getBalance): ${formatted3} ETH</p>`;
+
+            } catch (error) {
+                results.innerHTML += `<p>❌ Balance error: ${error.message}</p>`;
+                console.error('Balance test failed:', error);
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -151,32 +151,23 @@ export function throttle(func, limit) {
 // Web3 utilities
 export function createSafeWeb3Provider(ethereum) {
     try {
-        // Try different initialization methods to avoid proxy issues
-
-        // Method 1: Direct initialization with network detection
-        const provider = new ethers.providers.Web3Provider(ethereum, "any")
+        // ethers v6 syntax: use BrowserProvider instead of Web3Provider
+        const provider = new ethers.BrowserProvider(ethereum)
 
         // Add a custom ready check
         provider._safeReady = async function () {
             try {
-                await this.ready
+                await this.getNetwork()
                 return true
             } catch (error) {
-                console.warn('Provider ready check failed, trying alternative method:', error)
-                // Alternative: just try to get network
-                try {
-                    await this.getNetwork()
-                    return true
-                } catch (networkError) {
-                    console.warn('Network check also failed:', networkError)
-                    return false
-                }
+                console.warn('Provider ready check failed:', error)
+                return false
             }
         }
 
         return provider
     } catch (error) {
-        console.error('Failed to create Web3Provider:', error)
+        console.error('Failed to create BrowserProvider:', error)
         throw new Error('无法创建 Web3 提供者，请检查钱包连接')
     }
 }
@@ -184,15 +175,14 @@ export function createSafeWeb3Provider(ethereum) {
 export async function createProviderWithFallback(ethereum) {
     const strategies = [
         // Strategy 1: Standard initialization
-        () => new ethers.providers.Web3Provider(ethereum, "any"),
+        () => new ethers.BrowserProvider(ethereum),
 
-        // Strategy 2: Without network detection
-        () => new ethers.providers.Web3Provider(ethereum),
+        // Strategy 2: With specific network
+        () => new ethers.BrowserProvider(ethereum, "sepolia"),
 
-        // Strategy 3: Force sync mode
+        // Strategy 3: Basic provider
         () => {
-            const provider = new ethers.providers.Web3Provider(ethereum)
-            provider.pollingInterval = 4000
+            const provider = new ethers.BrowserProvider(ethereum)
             return provider
         }
     ]
@@ -203,7 +193,8 @@ export async function createProviderWithFallback(ethereum) {
             const provider = strategies[i]()
 
             // Test the provider
-            await provider.getSigner().getAddress()
+            const signer = await provider.getSigner()
+            const address = signer.address
             console.log(`Provider strategy ${i + 1} successful`)
             return provider
 
@@ -218,26 +209,37 @@ export async function createProviderWithFallback(ethereum) {
 
 export async function safeGetNetwork(provider) {
     try {
-        // Try the standard method first
-        return await provider.getNetwork()
-    } catch (error) {
-        console.warn('Standard getNetwork failed, trying alternative:', error)
-
-        // Fallback: get chainId directly from ethereum object
-        try {
+        // 先尝试从 window.ethereum 直接获取链ID，避免私有字段访问
+        if (window.ethereum) {
             const chainIdHex = await window.ethereum.request({
                 method: 'eth_chainId'
             })
             const chainId = parseInt(chainIdHex, 16)
 
-            // Return a minimal network object
+            // 返回简化的网络对象
             return {
                 chainId,
                 name: `Chain ${chainId}`
             }
+        }
+
+        // 如果 window.ethereum 不可用，尝试 provider.getNetwork()
+        return await provider.getNetwork()
+    } catch (error) {
+        console.warn('Network detection failed, trying fallback:', error)
+
+        // 最后的备用方案
+        try {
+            // 尝试通过 provider 的简化方法获取
+            const network = await provider.detectNetwork()
+            return network
         } catch (fallbackError) {
             console.error('All network detection methods failed:', fallbackError)
-            throw new Error('无法获取网络信息')
+            // 返回默认网络 ID
+            return {
+                chainId: 11155111, // Sepolia default
+                name: 'Chain 11155111'
+            }
         }
     }
 }

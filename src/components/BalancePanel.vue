@@ -91,36 +91,52 @@ const previousBalances = ref({})
 const chainBalances = ref({})
 const isLoadingBalances = ref(false)
 
-// Computed total portfolio value using on-chain balances when available, else fallback to local balances
+// Computed total portfolio value using combined balances
 const totalPortfolioValue = computed(() => {
   const tokens = walletStore.config.tokens || []
-  // If any token is missing on-chain balance, return null so UI shows '-'
-  for (const token of tokens) {
-    const sym = token.sym
-    if (typeof chainBalances.value[sym] !== 'number') return null
-  }
-
   let total = 0
   for (const token of tokens) {
     const sym = token.sym
     const price = token.price || 0
-    const bal = chainBalances.value[sym] || 0
+    const bal = combinedBalances.value[sym] || 0
     total += bal * price
   }
   return total
 })
 
-// Helper to format display: show '-' until on-chain value exists
+// Computed balances that include both on-chain and local amounts
+const combinedBalances = computed(() => {
+  const result = {}
+  if (walletStore.config.tokens) {
+    for (const token of walletStore.config.tokens) {
+      const sym = token.sym
+      // Get local balance (includes borrowed amounts)
+      const localBal = walletStore.getLocalBalance(sym)
+      // Use chain balance if available, otherwise use local
+      const chainBal = chainBalances.value[sym]
+      result[sym] = typeof chainBal === 'number' ? chainBal : localBal
+    }
+  }
+  return result
+})
+
+// Helper to format display: show the combined balance
 function displayBalance(sym) {
   if (!walletStore.isConnected) return '-'
-  const val = chainBalances.value[sym]
-  if (typeof val === 'number') return formatNumber(val, 4)
+  const val = combinedBalances.value[sym]
+  if (typeof val === 'number') {
+    // For ETH, show full precision; for other tokens, use standard formatting
+    if (sym === 'ETH') {
+      return val.toString() // Show full precision for ETH
+    }
+    return formatNumber(val, 6) // Increased precision for other tokens
+  }
   return '-'
 }
 
 function displayUSD(sym, price) {
   if (!walletStore.isConnected) return '-'
-  const val = chainBalances.value[sym]
+  const val = combinedBalances.value[sym]
   if (typeof val === 'number' && price) return '≈ $' + formatNumber(val * price, 2)
   return '-'
 }
@@ -157,17 +173,19 @@ function getTokenIcon(symbol) {
   return icons[symbol] || '◯'
 }
 
-// Watch for balance changes to show indicators
+// Watch for balance changes to show indicators and refresh on-chain balances
 watch(
   () => walletStore.config.tokens.map(token => walletStore.getLocalBalance(token.sym)),
   (newBalances, oldBalances) => {
     if (!oldBalances) return
     
+    let hasChanges = false
     walletStore.config.tokens.forEach((token, index) => {
       const newBalance = newBalances[index]
       const oldBalance = oldBalances[index]
       
       if (newBalance !== oldBalance) {
+        hasChanges = true
         const change = newBalance - oldBalance
         balanceChanges.value[token.sym] = {
           type: change > 0 ? 'increase' : 'decrease',
@@ -182,6 +200,12 @@ watch(
         }, 3000)
       }
     })
+    
+    // Refresh on-chain balances when local balances change
+    if (hasChanges && walletStore.isConnected) {
+      console.log('🔄 Local balance changed, refreshing chain balances...')
+      refreshBalances()
+    }
   },
   { deep: true }
 )

@@ -35,16 +35,26 @@ contract Mixer {
     }
     modifier onlyCM() { require(msg.sender == collateralManager, "not CM"); _; }
 
-    /// 存款：先在 token 对本合约 approve，再调用本函数
-    function deposit(bytes32 commitment, address token, uint256 amount) external nonReentrant {
-        require(token != address(0) && amount > 0, "bad args");
+    /// 存款：支持 ETH 和 ERC20 代币
+    function deposit(bytes32 commitment, address token, uint256 amount) external payable nonReentrant {
+        require(amount > 0, "bad amount");
         require(deposits[commitment].amount == 0, "commitment exists");
-        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        deposits[commitment] = DepositInfo({ token: token, amount: amount, withdrawn: false, locked: false });
+        
+        if (token == address(0)) {
+            // ETH 存款
+            require(msg.value == amount, "ETH amount mismatch");
+            deposits[commitment] = DepositInfo({ token: token, amount: amount, withdrawn: false, locked: false });
+        } else {
+            // ERC20 代币存款
+            require(msg.value == 0, "no ETH for token deposit");
+            IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+            deposits[commitment] = DepositInfo({ token: token, amount: amount, withdrawn: false, locked: false });
+        }
+        
         emit Deposit(commitment, token, amount);
     }
 
-    /// 提现：公开 (nullifier, secret)；不绑定存款地址
+    /// 提现：公开 (nullifier, secret)；不绑定存款地址，支持 ETH 和 ERC20
     function withdraw(address to, bytes32 nullifier, bytes32 secret) external nonReentrant {
         require(to != address(0), "to=0");
         bytes32 commitment = keccak256(abi.encodePacked(nullifier, secret));
@@ -54,7 +64,16 @@ contract Mixer {
         require(!nullifierSpent[nullifierHash], "nullifier used");
         nullifierSpent[nullifierHash] = true;
         info.withdrawn = true;
-        IERC20(info.token).safeTransfer(to, info.amount);
+        
+        if (info.token == address(0)) {
+            // ETH 提现
+            (bool success, ) = to.call{value: info.amount}("");
+            require(success, "ETH transfer failed");
+        } else {
+            // ERC20 代币提现
+            IERC20(info.token).safeTransfer(to, info.amount);
+        }
+        
         emit Withdraw(to, commitment, info.token, info.amount, nullifierHash);
     }
 
