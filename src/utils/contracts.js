@@ -523,7 +523,7 @@ export async function initializeContracts() {
 /**
  * Simplified deposit function for frontend use
  */
-export async function depositToMixer(token, amount) {
+export async function depositToMixer(token, amount, note = null) {
     console.log(`🔗 Starting real blockchain deposit: ${amount} ${token}`)
 
     if (!contractManager) {
@@ -541,8 +541,25 @@ export async function depositToMixer(token, amount) {
     }
 
     try {
-        // Generate commitment for privacy
-        const commitment = ethers.keccak256(ethers.randomBytes(32))
+        // Generate nullifier and secret from note if provided, otherwise random
+        let nullifier, secret
+        if (note) {
+            // Use the note to generate deterministic nullifier and secret
+            nullifier = ethers.keccak256(ethers.toUtf8Bytes(note + '_nullifier'))
+            secret = ethers.keccak256(ethers.toUtf8Bytes(note + '_secret'))
+        } else {
+            // Generate random nullifier and secret
+            nullifier = ethers.keccak256(ethers.randomBytes(32))
+            secret = ethers.keccak256(ethers.randomBytes(32))
+        }
+        
+        // Generate commitment using the same method as the contract
+        const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'bytes32'], [nullifier, secret]))
+
+        console.log('🔐 Generated cryptographic proof:')
+        console.log('   Nullifier:', nullifier)
+        console.log('   Secret:', secret)
+        console.log('   Commitment:', commitment)
 
         // Use the contract manager to make the deposit
         const receipt = await contractManager.deposit(token, amount, commitment)
@@ -556,6 +573,8 @@ export async function depositToMixer(token, amount) {
             success: true,
             txHash: receipt.transactionHash || receipt.hash,
             commitment: commitment,
+            nullifier: nullifier,
+            secret: secret,
             blockNumber: receipt.blockNumber || 'pending',
             gasUsed: receipt.gasUsed ? receipt.gasUsed.toString() : 'pending',
             token,
@@ -571,7 +590,7 @@ export async function depositToMixer(token, amount) {
 /**
  * Simplified withdrawal function
  */
-export async function withdrawFromMixer(commitment, secret, to) {
+export async function withdrawFromMixer(nullifier, secret, to) {
     console.log(`🔗 Starting real blockchain withdrawal`)
 
     if (!contractManager) {
@@ -579,8 +598,10 @@ export async function withdrawFromMixer(commitment, secret, to) {
     }
 
     try {
-        // Generate nullifier from secret
-        const nullifier = ethers.keccak256(secret)
+        console.log('🔐 Using provided cryptographic proof:')
+        console.log('   Nullifier:', nullifier)
+        console.log('   Secret:', secret)
+        console.log('   To Address:', to)
 
         const receipt = await contractManager.withdraw(to, nullifier, secret)
 

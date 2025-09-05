@@ -317,6 +317,7 @@ import { ref, computed, watch } from 'vue'
 import { useWalletStore } from '@/stores/wallet'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNumber, now } from '@/utils/helpers'
+import { depositToMixer, withdrawFromMixer } from '@/utils/contracts.js'
 
 const walletStore = useWalletStore()
 const notificationStore = useNotificationStore()
@@ -607,12 +608,14 @@ async function lend() {
     
     // 🔗 REAL BLOCKCHAIN TRANSACTION
     console.log(`📡 Sending transaction to Sepolia testnet...`)
-    const blockchainResult = await depositToMixer(token, amount)
+    const blockchainResult = await depositToMixer(token, amount, note)
     
     console.log(`🎉 Real transaction successful!`)
     console.log(`   TX Hash: ${blockchainResult.txHash}`)
     console.log(`   Block: ${blockchainResult.blockNumber}`)
     console.log(`   Commitment: ${blockchainResult.commitment}`)
+    console.log(`   Nullifier: ${blockchainResult.nullifier}`)
+    console.log(`   Secret: ${blockchainResult.secret}`)
     
     // Initialize notes object if it doesn't exist
     if (!walletStore.localData.notes) {
@@ -634,6 +637,8 @@ async function lend() {
       txHash: blockchainResult.txHash,
       blockNumber: blockchainResult.blockNumber,
       commitment: blockchainResult.commitment,
+      nullifier: blockchainResult.nullifier,
+      secret: blockchainResult.secret,
       gasUsed: blockchainResult.gasUsed,
       isRealTransaction: true
     }
@@ -960,6 +965,46 @@ async function withdraw() {
       totalInterest: formatNumber(totalInterest, 8),
       withdrawInterest: formatNumber(withdrawInterest, 8)
     })
+
+    // 🚀 执行真实的区块链withdraw交易
+    console.log('🚀 Starting REAL blockchain withdraw operation:', amount, record.token)
+    console.log('📡 Sending withdraw transaction to Sepolia testnet...')
+    
+    try {
+      // 使用记录中存储的nullifier和secret
+      const nullifier = record.nullifier
+      const secret = record.secret
+      const toAddress = withdrawForm.value.address
+      
+      if (!nullifier || !secret) {
+        throw new Error('Missing nullifier or secret for withdrawal. This note may be from an older version.')
+      }
+      
+      console.log('🔐 Using stored cryptographic proof for withdrawal:')
+      console.log('   Nullifier:', nullifier)
+      console.log('   Secret:', secret)
+      console.log('   To Address:', toAddress)
+      
+      const result = await withdrawFromMixer(nullifier, secret, toAddress)
+      
+      console.log('✅ Withdraw blockchain transaction successful!')
+      console.log('   Transaction Hash:', result.txHash)
+      console.log('   Block:', result.blockNumber)
+      
+      // 显示区块链交易成功的通知
+      notificationStore.success(
+        'Blockchain Transaction Sent!', 
+        `Withdraw transaction submitted to Sepolia testnet!\n\nTransaction Hash: ${result.txHash}\n\nView on Etherscan: https://sepolia.etherscan.io/tx/${result.txHash}`
+      )
+      
+    } catch (blockchainError) {
+      console.error('❌ Blockchain withdraw failed:', blockchainError)
+      notificationStore.error(
+        'Blockchain Transaction Failed', 
+        `Real blockchain transaction failed: ${blockchainError.message}\n\nNote: Local balance will still be updated for demo purposes.`
+      )
+      // 继续执行本地更新，即使区块链交易失败
+    }
     
     // 更新或删除记录
     if (amount === record.amount) {

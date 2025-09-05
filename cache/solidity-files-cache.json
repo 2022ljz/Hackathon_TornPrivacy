@@ -183,6 +183,43 @@
       "artifacts": [
         "ERC20Mock"
       ]
+    },
+    "/Users/gigg1ty/Documents/GitHub/Hackthon_TornPrivacy/Contracts/GasProfiler.sol": {
+      "lastModificationDate": 1757076552445,
+      "contentHash": "b5417d2bd523f3f9c15e22e85afbfbbc",
+      "sourceName": "Contracts/GasProfiler.sol",
+      "solcConfig": {
+        "version": "0.8.17",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./Mixer.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.17"
+      ],
+      "artifacts": [
+        "GasProfiler"
+      ]
     }
   }
 }
