@@ -6,14 +6,26 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "compile": "hardhat compile",
+        "deploy:sepolia": "hardhat run scripts/deploy.cjs --network sepolia",
+        "deploy:local": "hardhat run scripts/deploy.cjs --network localhost",
+        "test": "hardhat test",
+        "test:contracts": "hardhat run scripts/test-contracts.cjs --network sepolia",
+        "verify": "hardhat verify",
+        "generate-abis": "node scripts/generateABIs.cjs",
+        "setup-sepolia": "./deploy-sepolia.sh",
+        "clean": "hardhat clean && rm -rf deployments && rm -rf src/abis/*.json"
     },
     "dependencies": {
         "vue": "^3.3.4",
         "pinia": "^2.1.6",
-        "ethers": "^5.7.2",
+        "ethers": "^6.8.0",
         "@vueuse/core": "^10.4.1",
-        "gsap": "^3.12.2"
+        "gsap": "^3.12.2",
+        "hardhat": "^2.19.0",
+        "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+        "dotenv": "^16.3.1"
     },
     "devDependencies": {
         "@vitejs/plugin-vue": "^4.4.0",
