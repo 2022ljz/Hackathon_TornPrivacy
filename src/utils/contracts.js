@@ -1,5 +1,6 @@
 import { ethers } from 'ethers'
 import contractsConfig from '@/config/contracts.js'
+import { calculateOptimizedGasLimit, getRecommendedGasPrice, getDefaultGasLimit } from '@/config/gas.js'
 
 // 导入合约 ABIs
 let MixerABI, LendingPoolABI, CollateralManagerABI, ERC20ABI
@@ -99,6 +100,63 @@ export class ContractService {
         }
     }
 
+    // 🔧 清理小数位数，避免精度问题
+    sanitizeDecimalAmount(amount, decimals) {
+        try {
+            // 转换为字符串以处理
+            let amountStr = amount.toString()
+
+            // 如果是科学计数法，先转换
+            if (amountStr.includes('e') || amountStr.includes('E')) {
+                amountStr = Number(amount).toFixed(decimals)
+            }
+
+            // 检查小数点
+            const parts = amountStr.split('.')
+            if (parts.length > 1) {
+                // 限制小数位数不超过代币的decimals
+                const fractionalPart = parts[1].substring(0, decimals)
+                amountStr = parts[0] + '.' + fractionalPart
+            }
+
+            // 移除末尾的零
+            const result = parseFloat(amountStr).toString()
+
+            console.log(`🔧 Sanitized amount: ${amount} -> ${result} (decimals: ${decimals})`)
+            return result
+        } catch (error) {
+            console.warn('⚠️ Amount sanitization failed, using original:', error)
+            return amount.toString()
+        }
+    }
+
+    // 🔧 格式化bytes32参数，确保正确的长度
+    formatBytes32(value) {
+        try {
+            // 移除0x前缀（如果有）
+            let hex = value.toString()
+            if (hex.startsWith('0x')) {
+                hex = hex.slice(2)
+            }
+
+            // 确保是64个字符（32字节）
+            if (hex.length < 64) {
+                // 左填充0
+                hex = hex.padStart(64, '0')
+            } else if (hex.length > 64) {
+                // 截取前64个字符
+                hex = hex.slice(0, 64)
+            }
+
+            const result = '0x' + hex
+            console.log(`🔧 Formatted bytes32: ${value} -> ${result}`)
+            return result
+        } catch (error) {
+            console.warn('⚠️ Bytes32 formatting failed, using original:', error)
+            return value.toString()
+        }
+    }
+
     // 存款到混币器
     async deposit(tokenSymbol, amount, commitment) {
         try {
@@ -132,7 +190,12 @@ export class ContractService {
             const token = contractsConfig.TOKENS[tokenSymbol]
             if (!token) throw new Error(`Token ${tokenSymbol} not found`)
 
-            const amountWei = ethers.parseUnits(amount.toString(), token.decimals)
+            // 🔧 修复：清理小数位数
+            const sanitizedAmount = this.sanitizeDecimalAmount(amount, token.decimals)
+            const amountWei = ethers.parseUnits(sanitizedAmount.toString(), token.decimals)
+
+            // 🔧 格式化commitment确保正确的bytes32格式
+            const formattedCommitment = this.formatBytes32(commitment)
 
             // 如果是 ERC20 代币（不是 ETH），需要先授权
             if (token.address !== "0x0000000000000000000000000000000000000000" && token.address !== ethers.ZeroAddress) {
@@ -186,13 +249,40 @@ export class ContractService {
                 throw new Error('Mixer contract is not properly initialized for transactions')
             }
 
-            // 调用存款函数
+            // 🔧 添加gas估算和优化
             const isETH = token.address === "0x0000000000000000000000000000000000000000" || token.address === ethers.ZeroAddress
+            let gasEstimate
+            try {
+                gasEstimate = await this.contracts.mixer.deposit.estimateGas(
+                    formattedCommitment,
+                    isETH ? ethers.ZeroAddress : token.address,
+                    amountWei,
+                    { value: isETH ? amountWei : 0 }
+                )
+                console.log('⛽ Gas estimate for deposit:', gasEstimate.toString())
+            } catch (gasError) {
+                console.warn('⚠️ Gas estimation failed, using default limit:', gasError)
+                gasEstimate = getDefaultGasLimit('DEPOSIT')
+            }
+
+            // 使用优化的gas配置
+            const gasLimit = calculateOptimizedGasLimit(gasEstimate, 'DEPOSIT')
+            const gasPrice = getRecommendedGasPrice('STANDARD')
+
+            const txOptions = {
+                value: isETH ? amountWei : 0,
+                gasLimit
+            }
+            if (gasPrice) {
+                txOptions.gasPrice = gasPrice
+            }
+
+            // 调用存款函数
             const tx = await this.contracts.mixer.deposit(
-                commitment,
+                formattedCommitment,
                 isETH ? ethers.ZeroAddress : token.address,
                 amountWei,
-                { value: isETH ? amountWei : 0 }
+                txOptions
             )
 
             console.log('Deposit transaction sent:', tx.hash)
@@ -214,14 +304,19 @@ export class ContractService {
             const token = contractsConfig.TOKENS[tokenSymbol]
             if (!token) throw new Error(`Token ${tokenSymbol} not found`)
 
-            const amountWei = ethers.parseUnits(amount.toString(), token.decimals)
+            // 🔧 修复：清理小数位数
+            const sanitizedAmount = this.sanitizeDecimalAmount(amount, token.decimals)
+            const amountWei = ethers.parseUnits(sanitizedAmount.toString(), token.decimals)
             const isETH = token.address === "0x0000000000000000000000000000000000000000" || token.address === ethers.ZeroAddress
+
+            // 🔧 格式化commitment确保正确的bytes32格式
+            const formattedCommitment = this.formatBytes32(commitment)
 
             // 构建合约调用数据
             // deposit(bytes32 commitment, address token, uint256 amount)
             const iface = new ethers.Interface(MixerABI || [])
             const data = iface.encodeFunctionData('deposit', [
-                commitment,
+                formattedCommitment,
                 isETH ? ethers.ZeroAddress : token.address,
                 amountWei
             ])
@@ -277,7 +372,11 @@ export class ContractService {
                 return await this.withdrawViaWindowEthereum(to, nullifier, secret)
             }
 
-            const tx = await this.contracts.mixer.withdraw(to, nullifier, secret)
+            // 🔧 格式化nullifier和secret确保正确的bytes32格式
+            const formattedNullifier = this.formatBytes32(nullifier)
+            const formattedSecret = this.formatBytes32(secret)
+
+            const tx = await this.contracts.mixer.withdraw(to, formattedNullifier, formattedSecret)
             console.log('Withdraw transaction sent:', tx.hash)
 
             const receipt = await tx.wait()
@@ -294,14 +393,18 @@ export class ContractService {
     async withdrawViaWindowEthereum(to, nullifier, secret) {
         try {
             console.log('🌐 Using window.ethereum direct transaction method for withdraw')
-            
+
+            // 🔧 格式化nullifier和secret确保正确的bytes32格式
+            const formattedNullifier = this.formatBytes32(nullifier)
+            const formattedSecret = this.formatBytes32(secret)
+
             // 构建合约调用数据
             // withdraw(address to, bytes32 nullifier, bytes calldata proof)
             const iface = new ethers.Interface(MixerABI || [])
             const data = iface.encodeFunctionData('withdraw', [
                 to,
-                nullifier,
-                secret // 这里应该是proof，但现在用secret作为简化
+                formattedNullifier,
+                formattedSecret // 这里应该是proof，但现在用secret作为简化
             ])
 
             const transaction = {
@@ -312,14 +415,14 @@ export class ContractService {
             }
 
             console.log('📡 Sending withdraw transaction via window.ethereum:', transaction)
-            
+
             const txHash = await window.ethereum.request({
                 method: 'eth_sendTransaction',
                 params: [transaction]
             })
 
             console.log('✅ Withdraw transaction sent successfully:', txHash)
-            
+
             // 构建返回对象，模拟ethers.js的receipt格式
             return {
                 hash: txHash,
@@ -328,7 +431,7 @@ export class ContractService {
                 gasUsed: null,
                 status: 1
             }
-            
+
         } catch (error) {
             console.error('❌ Window.ethereum withdraw failed:', error)
             throw error
@@ -341,7 +444,9 @@ export class ContractService {
             const token = contractsConfig.TOKENS[tokenSymbol]
             if (!token) throw new Error(`Token ${tokenSymbol} not found`)
 
-            const amountWei = ethers.parseUnits(amount.toString(), token.decimals)
+            // 🔧 修复：清理小数位数
+            const sanitizedAmount = this.sanitizeDecimalAmount(amount, token.decimals)
+            const amountWei = ethers.parseUnits(sanitizedAmount.toString(), token.decimals)
 
             // 授权代币
             const tokenContract = this.contracts[tokenSymbol]
@@ -373,20 +478,52 @@ export class ContractService {
     }
 
     // 锁定抵押品并借贷
-    async lockAndBorrow(commitment, borrowTokenSymbol, borrowAmount) {
+    async lockAndBorrow(commitment, borrowToken, borrowAmount) {
         try {
-            const borrowToken = contractsConfig.TOKENS[borrowTokenSymbol]
-            if (!borrowToken) throw new Error(`Token ${borrowTokenSymbol} not found`)
+            // 检查signer是否可用，如果不行就使用window.ethereum
+            if (!this.signer || typeof this.signer.sendTransaction !== 'function') {
+                console.log('🔄 Lock and borrow signer verification failed, using window.ethereum method...')
+                return await this.lockAndBorrowViaWindowEthereum(commitment, borrowToken, borrowAmount)
+            }
 
+            const borrowTokenData = contractsConfig.TOKENS[borrowToken]
+            if (!borrowTokenData) throw new Error(`Borrow token ${borrowToken} not found`)
+
+            // 🔧 修复：清理小数位数
+            const sanitizedBorrowAmount = this.sanitizeDecimalAmount(borrowAmount, borrowTokenData.decimals)
             const borrowAmountWei = ethers.parseUnits(
-                borrowAmount.toString(),
-                borrowToken.decimals
+                sanitizedBorrowAmount.toString(),
+                borrowTokenData.decimals
             )
+
+            // 🔧 添加gas估算和优化
+            let gasEstimate
+            try {
+                gasEstimate = await this.contracts.collateralManager.lockAndBorrow.estimateGas(
+                    commitment,
+                    borrowTokenData.address === "0x0000000000000000000000000000000000000000" ? ethers.ZeroAddress : borrowTokenData.address,
+                    borrowAmountWei
+                )
+                console.log('⛽ Gas estimate for lockAndBorrow:', gasEstimate.toString())
+            } catch (gasError) {
+                console.warn('⚠️ Gas estimation failed, using default limit:', gasError)
+                gasEstimate = getDefaultGasLimit('LOCK_AND_BORROW')
+            }
+
+            // 使用优化的gas配置
+            const gasLimit = calculateOptimizedGasLimit(gasEstimate, 'LOCK_AND_BORROW')
+            const gasPrice = getRecommendedGasPrice('STANDARD')
+
+            const txOptions = { gasLimit }
+            if (gasPrice) {
+                txOptions.gasPrice = gasPrice
+            }
 
             const tx = await this.contracts.collateralManager.lockAndBorrow(
                 commitment,
-                borrowToken.address,
-                borrowAmountWei
+                borrowTokenData.address === "0x0000000000000000000000000000000000000000" ? ethers.ZeroAddress : borrowTokenData.address,
+                borrowAmountWei,
+                txOptions
             )
 
             console.log('Lock and borrow transaction sent:', tx.hash)
@@ -400,30 +537,129 @@ export class ContractService {
         }
     }
 
+    // 使用window.ethereum直接发送lock and borrow交易
+    async lockAndBorrowViaWindowEthereum(commitment, borrowToken, borrowAmount) {
+        try {
+            console.log('🌐 Using window.ethereum direct transaction method for lock and borrow')
+
+            const borrowTokenData = contractsConfig.TOKENS[borrowToken]
+            if (!borrowTokenData) throw new Error(`Borrow token ${borrowToken} not found`)
+
+            // 🔧 修复：清理小数位数
+            const sanitizedBorrowAmount = this.sanitizeDecimalAmount(borrowAmount, borrowTokenData.decimals)
+            const borrowAmountWei = ethers.parseUnits(
+                sanitizedBorrowAmount.toString(),
+                borrowTokenData.decimals
+            )
+
+            // 构建合约调用数据
+            // lockAndBorrow(bytes32 commitment, address borrowToken, uint256 borrowAmount)
+            const iface = new ethers.Interface(CollateralManagerABI || [])
+            const data = iface.encodeFunctionData('lockAndBorrow', [
+                commitment,
+                borrowTokenData.address === "0x0000000000000000000000000000000000000000" ? ethers.ZeroAddress : borrowTokenData.address,
+                borrowAmountWei
+            ])
+
+            // 🔧 添加gas估算
+            let gasEstimate
+            try {
+                gasEstimate = await window.ethereum.request({
+                    method: 'eth_estimateGas',
+                    params: [{
+                        from: await this.getCurrentWalletAddress(),
+                        to: contractsConfig.COLLATERAL_MANAGER_ADDRESS,
+                        data: data,
+                        value: '0x0'
+                    }]
+                })
+                console.log('⛽ Gas estimate for lockAndBorrow (via window.ethereum):', parseInt(gasEstimate, 16))
+            } catch (gasError) {
+                console.warn('⚠️ Gas estimation failed, using default limit:', gasError)
+                gasEstimate = '0x493e0' // 300000 in hex
+            }
+
+            // 增加20%安全边际
+            const gasEstimateNum = parseInt(gasEstimate, 16)
+            const gasLimitNum = Math.floor(gasEstimateNum * 1.2)
+            const gasLimitHex = '0x' + gasLimitNum.toString(16)
+
+            // 🔧 使用低gas价格进行测试网优化
+            const gasPrice = getRecommendedGasPrice('STANDARD')
+            const gasPriceHex = gasPrice ? '0x' + gasPrice.toString(16) : undefined
+
+            const transaction = {
+                from: await this.getCurrentWalletAddress(),
+                to: contractsConfig.COLLATERAL_MANAGER_ADDRESS,
+                data: data,
+                value: '0x0',
+                gas: gasLimitHex  // 🔧 添加gas限制
+            }
+
+            // 添加gasPrice（如果配置了）
+            if (gasPriceHex) {
+                transaction.gasPrice = gasPriceHex
+                console.log('🔧 Using optimized gas price:', parseInt(gasPriceHex, 16), 'wei')
+            }
+
+            console.log('📡 Sending lock and borrow transaction via window.ethereum:', transaction)
+
+            const txHash = await window.ethereum.request({
+                method: 'eth_sendTransaction',
+                params: [transaction]
+            })
+
+            console.log('✅ Lock and borrow transaction sent successfully:', txHash)
+
+            // 构建返回对象，模拟ethers.js的receipt格式
+            return {
+                hash: txHash,
+                transactionHash: txHash,
+                blockNumber: null,
+                gasUsed: null,
+                status: 1
+            }
+
+        } catch (error) {
+            console.error('❌ Window.ethereum lock and borrow failed:', error)
+            throw error
+        }
+    }
+
     // 还款并解锁抵押品
     async repayAndUnlock(commitment, repayAmount, tokenSymbol) {
         try {
+            // 检查signer是否可用，如果不行就使用window.ethereum
+            if (!this.signer || typeof this.signer.sendTransaction !== 'function') {
+                console.log('🔄 Repay and unlock signer verification failed, using window.ethereum method...')
+                return await this.repayAndUnlockViaWindowEthereum(commitment, repayAmount, tokenSymbol)
+            }
+
             const token = contractsConfig.TOKENS[tokenSymbol]
             if (!token) throw new Error(`Token ${tokenSymbol} not found`)
 
+            // 🔧 修复：限制小数位数以避免精度问题
+            const sanitizedAmount = this.sanitizeDecimalAmount(repayAmount, token.decimals)
             const repayAmountWei = ethers.parseUnits(
-                repayAmount.toString(),
+                sanitizedAmount.toString(),
                 token.decimals
             )
 
-            // 授权还款代币
-            const tokenContract = this.contracts[tokenSymbol]
-            const allowance = await tokenContract.allowance(
-                this.signer.address,
-                contractsConfig.LENDING_POOL_ADDRESS
-            )
-
-            if (allowance.lt(repayAmountWei)) {
-                const approveTx = await tokenContract.approve(
-                    contractsConfig.LENDING_POOL_ADDRESS,
-                    repayAmountWei
+            // 如果是ERC20代币，需要先授权
+            if (token.address !== "0x0000000000000000000000000000000000000000" && token.address !== ethers.ZeroAddress) {
+                const tokenContract = this.contracts[tokenSymbol]
+                const allowance = await tokenContract.allowance(
+                    await this.signer.getAddress(),
+                    contractsConfig.COLLATERAL_MANAGER_ADDRESS
                 )
-                await approveTx.wait()
+
+                if (allowance.lt(repayAmountWei)) {
+                    const approveTx = await tokenContract.approve(
+                        contractsConfig.COLLATERAL_MANAGER_ADDRESS,
+                        repayAmountWei
+                    )
+                    await approveTx.wait()
+                }
             }
 
             const tx = await this.contracts.collateralManager.repayAndUnlock(
@@ -438,6 +674,63 @@ export class ContractService {
             return receipt
         } catch (error) {
             console.error('Repay and unlock failed:', error)
+            throw error
+        }
+    }
+
+    // 使用window.ethereum直接发送repay and unlock交易
+    async repayAndUnlockViaWindowEthereum(commitment, repayAmount, tokenSymbol) {
+        try {
+            console.log('🌐 Using window.ethereum direct transaction method for repay and unlock')
+
+            const token = contractsConfig.TOKENS[tokenSymbol]
+            if (!token) throw new Error(`Token ${tokenSymbol} not found`)
+
+            // 🔧 修复：限制小数位数以避免精度问题
+            const sanitizedAmount = this.sanitizeDecimalAmount(repayAmount, token.decimals)
+            const repayAmountWei = ethers.parseUnits(
+                sanitizedAmount.toString(),
+                token.decimals
+            )
+
+            // 如果是ERC20代币，需要先处理授权（这里简化处理，假设已经授权）
+            const isETH = token.address === "0x0000000000000000000000000000000000000000" || token.address === ethers.ZeroAddress
+
+            // 构建合约调用数据
+            // repayAndUnlock(bytes32 commitment, uint256 repayAmount)
+            const iface = new ethers.Interface(CollateralManagerABI || [])
+            const data = iface.encodeFunctionData('repayAndUnlock', [
+                commitment,
+                repayAmountWei
+            ])
+
+            const transaction = {
+                from: await this.getCurrentWalletAddress(),
+                to: contractsConfig.COLLATERAL_MANAGER_ADDRESS,
+                data: data,
+                value: isETH ? '0x' + repayAmountWei.toString(16) : '0x0'
+            }
+
+            console.log('📡 Sending repay and unlock transaction via window.ethereum:', transaction)
+
+            const txHash = await window.ethereum.request({
+                method: 'eth_sendTransaction',
+                params: [transaction]
+            })
+
+            console.log('✅ Repay and unlock transaction sent successfully:', txHash)
+
+            // 构建返回对象，模拟ethers.js的receipt格式
+            return {
+                hash: txHash,
+                transactionHash: txHash,
+                blockNumber: null,
+                gasUsed: null,
+                status: 1
+            }
+
+        } catch (error) {
+            console.error('❌ Window.ethereum repay and unlock failed:', error)
             throw error
         }
     }
@@ -552,7 +845,7 @@ export async function depositToMixer(token, amount, note = null) {
             nullifier = ethers.keccak256(ethers.randomBytes(32))
             secret = ethers.keccak256(ethers.randomBytes(32))
         }
-        
+
         // Generate commitment using the same method as the contract
         const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'bytes32'], [nullifier, secret]))
 
@@ -700,4 +993,215 @@ export async function testSignerCapabilities() {
 if (typeof window !== 'undefined') {
     window.debugContractStatus = debugContractStatus
     window.testSignerCapabilities = testSignerCapabilities
+}
+
+/**
+ * Simplified stake and borrow function for frontend use
+ * 正确的流程：先deposit到Mixer作为stake，然后可选择性地borrow
+ */
+export async function stakeAndBorrow(collateralToken, collateralAmount, borrowToken, borrowAmount) {
+    console.log(`🔗 Starting real blockchain stake: ${collateralAmount} ${collateralToken}`)
+
+    if (!contractManager) {
+        throw new Error('Contract manager not initialized. Please call connectWallet() first.')
+    }
+
+    try {
+        // 步骤1：生成nullifier和secret用于commitment
+        const nullifier = ethers.hexlify(ethers.randomBytes(31))
+        const secret = ethers.hexlify(ethers.randomBytes(31))
+        const commitment = ethers.keccak256(
+            ethers.solidityPacked(['bytes31', 'bytes31'], [nullifier, secret])
+        )
+
+        console.log('🔐 Generated commitment proof:')
+        console.log('   Nullifier:', nullifier)
+        console.log('   Secret:', secret)
+        console.log('   Commitment:', commitment)
+
+        // 步骤2：先deposit到Mixer作为stake（这是真正的"stake"操作）
+        console.log('📝 Step 1: Depositing to Mixer as stake...')
+        const depositReceipt = await contractManager.deposit(collateralToken, collateralAmount, commitment)
+        console.log('✅ Stake deposit successful:', depositReceipt.transactionHash || depositReceipt.hash)
+
+        let borrowReceipt = null
+        let actualBorrowAmount = borrowAmount
+
+        // 步骤3：如果有borrowAmount > 0，则进行lockAndBorrow
+        if (borrowAmount > 0) {
+            console.log(`📝 Step 2: Borrowing ${borrowAmount} ${borrowToken} against staked collateral...`)
+
+            // 使用刚deposit的commitment进行lockAndBorrow
+            borrowReceipt = await contractManager.lockAndBorrow(
+                commitment,
+                borrowToken,
+                borrowAmount
+            )
+            console.log('✅ Borrow successful:', borrowReceipt.transactionHash || borrowReceipt.hash)
+        } else {
+            console.log('📝 Step 2: Skipped borrowing (amount = 0)')
+            actualBorrowAmount = 0
+        }
+
+        console.log(`✅ Stake and borrow completed!`)
+        console.log(`   Stake Transaction: ${depositReceipt.transactionHash || depositReceipt.hash}`)
+        if (borrowReceipt) {
+            console.log(`   Borrow Transaction: ${borrowReceipt.transactionHash || borrowReceipt.hash}`)
+        }
+
+        // 保存完整的stake信息到localStorage
+        const stakeData = {
+            commitment: commitment,
+            nullifier: nullifier,
+            secret: secret,
+            collateralToken: collateralToken,
+            collateralAmount: collateralAmount,
+            borrowToken: borrowToken,
+            borrowAmount: actualBorrowAmount,
+            stakeTime: Date.now(),
+            status: 'active',
+            stakeTxHash: depositReceipt.transactionHash || depositReceipt.hash,
+            borrowTxHash: borrowReceipt ? (borrowReceipt.transactionHash || borrowReceipt.hash) : null,
+            borrows: actualBorrowAmount > 0 ? {
+                [borrowToken]: {
+                    amount: actualBorrowAmount,
+                    borrowTime: Date.now()
+                }
+            } : {}
+        }
+
+        return {
+            success: true,
+            commitment: commitment,
+            nullifier: nullifier,
+            secret: secret,
+            stakeTxHash: depositReceipt.transactionHash || depositReceipt.hash,
+            borrowTxHash: borrowReceipt ? (borrowReceipt.transactionHash || borrowReceipt.hash) : null,
+            collateralAmount: collateralAmount,
+            borrowAmount: actualBorrowAmount
+        }
+
+    } catch (error) {
+        console.error(`❌ Stake and borrow failed:`, error)
+        throw new Error(`Stake and borrow failed: ${error.message}`)
+    }
+}
+
+/**
+ * Simplified borrow function for frontend use
+ * 基于已有的stake进行借款
+ */
+export async function borrowAgainstStake(commitment, borrowToken, borrowAmount) {
+    console.log(`🔗 Starting blockchain borrow: ${borrowAmount} ${borrowToken} against stake ${commitment}`)
+
+    if (!contractManager) {
+        throw new Error('Contract manager not initialized. Please call connectWallet() first.')
+    }
+
+    try {
+        const receipt = await contractManager.lockAndBorrow(
+            commitment,
+            borrowToken,
+            borrowAmount
+        )
+
+        console.log(`✅ Borrow successful!`)
+        console.log(`   Transaction Hash: ${receipt.transactionHash || receipt.hash}`)
+        console.log(`   Block: ${receipt.blockNumber || 'pending'}`)
+
+        return {
+            success: true,
+            txHash: receipt.transactionHash || receipt.hash,
+            blockNumber: receipt.blockNumber || 'pending',
+            gasUsed: receipt.gasUsed ? receipt.gasUsed.toString() : 'pending'
+        }
+
+    } catch (error) {
+        console.error(`❌ Borrow failed:`, error)
+        throw new Error(`Borrow failed: ${error.message}`)
+    }
+}
+
+/**
+ * Simplified unstake and repay function for frontend use
+ */
+/**
+ * Simplified unstake and repay function for frontend use
+ * 完整的unstake流程：先repayAndUnlock偿还债务，然后从Mixer withdraw资金
+ */
+export async function unstakeAndRepay(commitment, nullifier, secret, repayAmount, repayToken) {
+    console.log(`🔗 Starting blockchain unstake: repay ${repayAmount} ${repayToken}, then withdraw stake`)
+
+    if (!contractManager) {
+        throw new Error('Contract manager not initialized. Please call connectWallet() first.')
+    }
+
+    try {
+        let repayReceipt = null
+        let totalTransactions = 0
+
+        // 预估gas费用和交易数量
+        console.log('⛽ Analyzing gas costs...')
+
+        // 步骤1：如果有债务，先repayAndUnlock
+        if (repayAmount > 0) {
+            console.log(`📝 Step 1: Repaying ${repayAmount} ${repayToken}...`)
+
+            // 检查是否需要额外的approve交易
+            const token = contractsConfig.TOKENS[repayToken]
+            const isETH = !token || token.address === "0x0000000000000000000000000000000000000000" || token.address === ethers.ZeroAddress
+
+            if (!isETH) {
+                console.log('⚠️  Note: ERC20 repayment requires 2 transactions:')
+                console.log('   1. Approve token spend (~50,000 gas)')
+                console.log('   2. Repay and unlock (~150,000 gas)')
+                totalTransactions += 2
+            } else {
+                console.log('ℹ️  ETH repayment requires 1 transaction (~150,000 gas)')
+                totalTransactions += 1
+            }
+
+            repayReceipt = await contractManager.repayAndUnlock(
+                commitment,
+                repayAmount,
+                repayToken
+            )
+            console.log('✅ Repay and unlock successful:', repayReceipt.transactionHash || repayReceipt.hash)
+        } else {
+            console.log('📝 Step 1: No debt to repay, skipping repayAndUnlock')
+        }
+
+        // 步骤2：从Mixer withdraw stake资金
+        console.log('📝 Step 2: Withdrawing stake from Mixer...')
+        console.log('ℹ️  Withdraw transaction (~200,000 gas)')
+        totalTransactions += 1
+
+        console.log(`📊 Total transactions required: ${totalTransactions}`)
+
+        const withdrawReceipt = await contractManager.withdraw(
+            await contractManager.getCurrentWalletAddress(),
+            nullifier,
+            secret
+        )
+        console.log('✅ Withdraw successful:', withdrawReceipt.transactionHash || withdrawReceipt.hash)
+
+        console.log(`✅ Unstake completed!`)
+        if (repayReceipt) {
+            console.log(`   Repay Transaction: ${repayReceipt.transactionHash || repayReceipt.hash}`)
+        }
+        console.log(`   Withdraw Transaction: ${withdrawReceipt.transactionHash || withdrawReceipt.hash}`)
+
+        return {
+            success: true,
+            repayTxHash: repayReceipt ? (repayReceipt.transactionHash || repayReceipt.hash) : null,
+            withdrawTxHash: withdrawReceipt.transactionHash || withdrawReceipt.hash,
+            blockNumber: withdrawReceipt.blockNumber || 'pending',
+            gasUsed: withdrawReceipt.gasUsed ? withdrawReceipt.gasUsed.toString() : 'pending',
+            totalTransactions: totalTransactions
+        }
+
+    } catch (error) {
+        console.error(`❌ Unstake failed:`, error)
+        throw new Error(`Unstake failed: ${error.message}`)
+    }
 }

@@ -23,25 +23,19 @@ export const useWalletStore = defineStore('wallet', () => {
         lendingAddr: contractsConfig.LENDING_POOL_ADDRESS,
         mixerAddr: contractsConfig.MIXER_ADDRESS,
         tokens: [
-            { sym: "ETH", addr: "0x0000000000000000000000000000000000000000", decimals: 18, price: 3500 },
-            { sym: "DAI", addr: contractsConfig.TOKENS.DAI.address, decimals: 18, price: 1 },
-            { sym: "USDC", addr: contractsConfig.TOKENS.USDC.address, decimals: 6, price: 1 },
+            { sym: "ETH", addr: "0x0000000000000000000000000000000000000000", decimals: 18, price: 3500 }
+            // 暂时只保留ETH，等验证其他代币合约后再添加
+            // { sym: "DAI", addr: contractsConfig.TOKENS.DAI.address, decimals: 18, price: 1 },
+            // { sym: "USDC", addr: contractsConfig.TOKENS.USDC.address, decimals: 6, price: 1 },
         ],
     })
 
-    // Local data for demo
+    // 🔥 删除所有本地模拟数据！只使用真实链上数据
     const localData = ref({
-        lends: {},
-        stakes: {},
-        borrows: {},
-        notes: {},
-        stakeNotes: {},  // 新增stake notes存储
-        balance: {
-            ETH: 0,
-            DAI: 0,
-            USDC: 0,
-            WBTC: 0
-        }
+        notes: {},        // 只保留commitment notes（链上交易凭证）
+        stakeNotes: {},   // 只保留stake notes（链上交易凭证）
+        // 🚫 删除所有模拟余额、借贷、质押数据
+        // 🚫 所有数据必须从区块链读取
     })
 
     // ABIs
@@ -363,6 +357,7 @@ export const useWalletStore = defineStore('wallet', () => {
         }
     }
 
+    // 🔥 纯链上余额查询 - 删除所有本地模拟数据
     async function getBalance(symbol) {
         if (!address.value) return 0
 
@@ -370,9 +365,7 @@ export const useWalletStore = defineStore('wallet', () => {
         if (!token) return 0
 
         try {
-            let walletBalance = 0
-
-            // 检查是否是 ETH (零地址或 "eth")
+            // 检查是否是 ETH
             const isEth = token.addr && (
                 String(token.addr).toLowerCase() === 'eth' ||
                 token.addr === '0x0000000000000000000000000000000000000000' ||
@@ -380,63 +373,51 @@ export const useWalletStore = defineStore('wallet', () => {
             ) || symbol === 'ETH'
 
             if (isEth) {
-                // 对于 ETH，直接使用 window.ethereum 避免私有字段问题
-                try {
-                    const balanceHex = await window.ethereum.request({
-                        method: 'eth_getBalance',
-                        params: [address.value, 'latest']
-                    })
-                    const balance = ethers.getBigInt(balanceHex)
-                    walletBalance = Number(ethers.formatEther(balance))
-                    console.debug('ETH balance retrieved via eth_getBalance:', walletBalance)
-                } catch (error) {
-                    console.warn('Failed to get ETH balance:', error)
-                    walletBalance = localData.value.balance[symbol] || 0
-                }
+                // 🔗 ETH余额 - 纯链上查询
+                const balanceHex = await window.ethereum.request({
+                    method: 'eth_getBalance',
+                    params: [address.value, 'latest']
+                })
+                const balance = ethers.getBigInt(balanceHex)
+                const walletBalance = Number(ethers.formatEther(balance))
+                console.log('🔗 ETH balance from blockchain:', walletBalance)
+                return walletBalance
             } else if (token.addr) {
-                // ERC20 token - 使用 eth_call 避免创建合约实例
-                try {
-                    // 构建 balanceOf 调用数据
-                    const balanceOfSignature = '0x70a08231' // balanceOf(address)
-                    const paddedAddress = address.value.slice(2).padStart(64, '0')
-                    const callData = balanceOfSignature + paddedAddress
+                // 🔗 ERC20代币余额 - 纯链上查询
+                const balanceOfSignature = '0x70a08231' // balanceOf(address)
+                const paddedAddress = address.value.slice(2).padStart(64, '0')
+                const callData = balanceOfSignature + paddedAddress
 
-                    const result = await window.ethereum.request({
-                        method: 'eth_call',
-                        params: [{
-                            to: token.addr,
-                            data: callData
-                        }, 'latest']
-                    })
+                const result = await window.ethereum.request({
+                    method: 'eth_call',
+                    params: [{
+                        to: token.addr,
+                        data: callData
+                    }, 'latest']
+                })
 
-                    if (result && result !== '0x') {
-                        const balance = ethers.getBigInt(result)
-                        walletBalance = Number(ethers.formatUnits(balance, token.decimals))
-                        console.debug(`${symbol} balance retrieved via eth_call:`, walletBalance)
-                    } else {
-                        console.warn(`No balance data for ${symbol}, using local balance`)
-                        walletBalance = localData.value.balance[symbol] || 0
-                    }
-                } catch (contractError) {
-                    console.warn(`Failed to get contract balance for ${symbol}:`, contractError)
-                    walletBalance = localData.value.balance[symbol] || 0
+                if (result && result !== '0x') {
+                    const balance = ethers.getBigInt(result)
+                    const walletBalance = Number(ethers.formatUnits(balance, token.decimals))
+                    console.log(`🔗 ${symbol} balance from blockchain:`, walletBalance)
+                    return walletBalance
+                } else {
+                    console.log(`🔗 ${symbol} balance from blockchain: 0 (no balance)`)
+                    return 0
                 }
             } else {
-                // No on-chain address configured: use local demo balance
-                walletBalance = localData.value.balance[symbol] || 0
+                // 🚫 没有配置链上地址的代币不显示
+                console.warn(`❌ No blockchain address configured for ${symbol}`)
+                return 0
             }
-
-            // 添加借款余额（如果有的话）- 这些都是用户可用的资金
-            const borrowedAmount = localData.value.borrows[symbol] || 0
-            console.debug(`Balance calculation for ${symbol}: wallet=${walletBalance}, borrowed=${borrowedAmount}, total=${walletBalance + borrowedAmount}`)
-
-            return walletBalance + borrowedAmount
         } catch (error) {
-            console.error(`Error getting balance for ${symbol}:`, error)
-            return localData.value.balance[symbol] || 0
+            console.error(`❌ Failed to get blockchain balance for ${symbol}:`, error)
+            return 0
         }
     }
 
+    // 🔥 COMPLETELY REMOVE LOCAL BALANCE PERSISTENCE!
+    // 💾 Only persist notes and config, NO balance data!
     function loadPersistedData() {
         try {
             const savedConfig = localStorage.getItem("mixer-config")
@@ -447,49 +428,80 @@ export const useWalletStore = defineStore('wallet', () => {
             const savedLocal = localStorage.getItem("mixer-local")
             if (savedLocal) {
                 const parsed = JSON.parse(savedLocal)
-                // 确保 notes 字段存在
-                if (!parsed.notes) {
-                    parsed.notes = {}
+                // 🚫 COMPLETELY IGNORE ANY BALANCE DATA!
+                // 只保留notes数据，删除任何balance相关数据
+                if (parsed.notes) {
+                    localData.value.notes = parsed.notes
                 }
-                // 确保 balance 字段存在并初始化
-                if (!parsed.balance) {
-                    parsed.balance = {
-                        ETH: 0,
-                        DAI: 0,
-                        USDC: 0,
-                        WBTC: 0
-                    }
-                }
-                Object.assign(localData.value, parsed)
-                console.log('📂 Loaded persisted data:', localData.value)
-            } else {
-                // 如果没有保存的数据，初始化balance为 0（避免误导性的示例余额）
-                localData.value.balance = {
-                    ETH: 0,
-                    DAI: 0,
-                    USDC: 0,
-                    WBTC: 0
-                }
+                console.log('📂 Loaded persisted data (notes only):', localData.value)
+            }
+
+            // 🧹 FORCE CLEAN localStorage balance data if it exists
+            const currentData = JSON.parse(localStorage.getItem("mixer-local") || "{}")
+            if (currentData.balance) {
+                delete currentData.balance
+                localStorage.setItem("mixer-local", JSON.stringify(currentData))
+                console.log('� Cleaned hardcoded balance data from localStorage!')
             }
         } catch (error) {
             console.error("Failed to load persisted data:", error)
-            // 出错时也要初始化balance
-            localData.value.balance = {
-                ETH: 1000,
-                DAI: 1000,
-                USDC: 1000,
-                WBTC: 1000
-            }
         }
     }
 
     // 初始化时加载数据
     loadPersistedData()
 
+    // 🔥 IMMEDIATELY CLEAN ANY EXISTING HARDCODED DATA!
+    function forceCleanHardcodedData() {
+        try {
+            // 强制清理localStorage中的balance数据
+            const localStorageKeys = ['mixer-local', 'mixer-config']
+            localStorageKeys.forEach(key => {
+                const data = localStorage.getItem(key)
+                if (data) {
+                    const parsed = JSON.parse(data)
+                    if (parsed.balance) {
+                        delete parsed.balance
+                        localStorage.setItem(key, JSON.stringify(parsed))
+                        console.log(`🧹 Cleaned balance data from ${key}`)
+                    }
+                }
+            })
+
+            // 确保当前localData中没有balance数据
+            if (localData.value.balance) {
+                delete localData.value.balance
+                console.log('🔥 Removed balance from current localData')
+            }
+
+            console.log('✅ All hardcoded balance data ELIMINATED!')
+        } catch (error) {
+            console.error('Failed to clean hardcoded data:', error)
+        }
+    }
+
+    // 立即执行清理
+    forceCleanHardcodedData()
+
+    // 也在组件挂载时清理（确保清理）
+    setTimeout(forceCleanHardcodedData, 100)
+
     function persistData() {
         try {
             localStorage.setItem("mixer-config", JSON.stringify(config.value))
-            localStorage.setItem("mixer-local", JSON.stringify(localData.value))
+
+            // 🔥 ONLY PERSIST NOTES DATA, NO BALANCE!
+            const dataToPersist = {
+                lends: localData.value.lends || {},
+                stakes: localData.value.stakes || {},
+                borrows: localData.value.borrows || {},
+                notes: localData.value.notes || {},
+                stakeNotes: localData.value.stakeNotes || {}
+                // 🚫 NO BALANCE DATA PERSISTED!
+            }
+
+            localStorage.setItem("mixer-local", JSON.stringify(dataToPersist))
+            console.log('💾 Persisted data (no balance):', dataToPersist)
         } catch (error) {
             console.error("Failed to persist data:", error)
         }
@@ -501,19 +513,14 @@ export const useWalletStore = defineStore('wallet', () => {
             localStorage.removeItem("mixer-config")
             localStorage.removeItem("mixer-local")
 
-            // 重置 localData 到初始状态
+            // 🔥 RESET localData WITHOUT ANY BALANCE!
             localData.value = {
                 lends: {},
                 stakes: {},
                 borrows: {},
                 notes: {},
-                stakeNotes: {},
-                balance: {
-                    ETH: 0,
-                    DAI: 0,
-                    USDC: 0,
-                    WBTC: 0
-                }
+                stakeNotes: {}
+                // 🚫 NO BALANCE DATA AT ALL!
             }
 
             // 重置配置到默认值
@@ -524,10 +531,8 @@ export const useWalletStore = defineStore('wallet', () => {
                 lendingAddr: "",
                 mixerAddr: "",
                 tokens: [
-                    { sym: "ETH", addr: "eth", decimals: 18, price: 3500 },
-                    { sym: "DAI", addr: "", decimals: 18, price: 1 },
-                    { sym: "USDC", addr: "", decimals: 6, price: 1 },
-                    { sym: "WBTC", addr: "", decimals: 8, price: 65000 },
+                    { sym: "ETH", addr: "eth", decimals: 18, price: 3500 }
+                    // 重置时只保留ETH配置
                 ],
             }
 
@@ -539,79 +544,9 @@ export const useWalletStore = defineStore('wallet', () => {
         }
     }
 
-    // Local balance management functions
-    function getLocalBalance(token) {
-        if (!localData.value.balance) {
-            // 初始化balance对象如果不存在
-            localData.value.balance = {
-                ETH: 1000,
-                DAI: 1000,
-                USDC: 1000,
-                WBTC: 1000
-            }
-        }
-        return localData.value.balance[token] || 0
-    }
-
-    function updateBalance(token, amount, operation = 'set') {
-        if (!localData.value.balance) {
-            localData.value.balance = {
-                ETH: 1000,
-                DAI: 1000,
-                USDC: 1000,
-                WBTC: 1000
-            }
-        }
-
-        const currentBalance = localData.value.balance[token] || 0
-
-        switch (operation) {
-            case 'add':
-                localData.value.balance[token] = currentBalance + amount
-                break
-            case 'subtract':
-                localData.value.balance[token] = Math.max(0, currentBalance - amount)
-                break
-            case 'set':
-            default:
-                localData.value.balance[token] = amount
-                break
-        }
-
-        // 持久化数据
-        persistData()
-
-        console.log(`💰 Balance updated: ${token} ${operation} ${amount}, new balance: ${localData.value.balance[token]}`)
-    }
-
-    // Balance operations for DeFi actions
-    function handleLendOperation(token, amount) {
-        // Lend: 减少可用余额（钱被放出借贷）
-        updateBalance(token, amount, 'subtract')
-    }
-
-    function handleWithdrawOperation(token, amount) {
-        // Withdraw: 增加可用余额（从借贷中取回钱）
-        updateBalance(token, amount, 'add')
-    }
-
-    function handleStakeOperation(token, amount) {
-        // Stake: 减少可用余额（钱被抵押）
-        updateBalance(token, amount, 'subtract')
-    }
-
-    function handleBorrowOperation(borrowToken, borrowAmount) {
-        // Borrow: 增加借来的代币余额
-        updateBalance(borrowToken, borrowAmount, 'add')
-    }
-
-    function handleUnstakeOperation(token, amount, borrowToken, borrowAmount) {
-        // Unstake: 增加抵押代币余额，减少借来的代币余额
-        updateBalance(token, amount, 'add')
-        if (borrowToken && borrowAmount > 0) {
-            updateBalance(borrowToken, borrowAmount, 'subtract')
-        }
-    }
+    // 🔥 ALL LOCAL DATA MANAGEMENT FUNCTIONS REMOVED! 
+    // 🚫 No more hardcoded balances, no more local simulation!
+    // 🔗 Everything is REAL blockchain data from Sepolia testnet!
 
     // 主要的 DeFi 交互函数 - 避免 ethers 私有字段问题
     async function depositToMixer(amount) {
@@ -738,20 +673,16 @@ export const useWalletStore = defineStore('wallet', () => {
         loadPersistedData,
         persistData,
         clearAllData,
+        forceCleanHardcodedData,
         callContract,
 
         // DeFi operations
         depositToMixer,
         lendToPool,
-        borrowFromPool,
+        borrowFromPool
 
-        // Balance management
-        getLocalBalance,
-        updateBalance,
-        handleLendOperation,
-        handleWithdrawOperation,
-        handleStakeOperation,
-        handleBorrowOperation,
-        handleUnstakeOperation
+        // 🔥 NO MORE LOCAL BALANCE MANAGEMENT!
+        // 🚫 All hardcoded data functions REMOVED!
+        // 🔗 Pure Sepolia blockchain operations only!
     }
 })

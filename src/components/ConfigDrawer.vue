@@ -233,10 +233,9 @@ function saveConfig() {
 
 function getTokenColor(symbol) {
   const colors = {
-    ETH: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-    DAI: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
-    USDC: 'bg-green-500/20 text-green-300 border border-green-500/30',
-    WBTC: 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+    ETH: 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+    // 🔥 DAI, USDC, WBTC colors REMOVED!
+    // 🚫 Only ETH supported on Sepolia testnet!
   }
   return colors[symbol] || 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
 }

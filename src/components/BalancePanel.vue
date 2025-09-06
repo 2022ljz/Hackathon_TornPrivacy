@@ -110,11 +110,10 @@ const combinedBalances = computed(() => {
   if (walletStore.config.tokens) {
     for (const token of walletStore.config.tokens) {
       const sym = token.sym
-      // Get local balance (includes borrowed amounts)
-      const localBal = walletStore.getLocalBalance(sym)
-      // Use chain balance if available, otherwise use local
+      // 🔥 ONLY USE REAL BLOCKCHAIN BALANCE!
+      // 🚫 No more local balance simulation!
       const chainBal = chainBalances.value[sym]
-      result[sym] = typeof chainBal === 'number' ? chainBal : localBal
+      result[sym] = typeof chainBal === 'number' ? chainBal : 0
     }
   }
   return result
@@ -162,20 +161,18 @@ async function refreshBalances() {
   }
 }
 
-// Token icons mapping
+// Token icons mapping - 🔥 ONLY ETH SUPPORTED!
 function getTokenIcon(symbol) {
   const icons = {
-    ETH: '⟠',
-    DAI: '◈',
-    USDC: '●',
-    WBTC: '₿'
+    ETH: '⟠'
+    // 🚫 DAI, USDC, WBTC REMOVED! Only ETH on Sepolia!
   }
   return icons[symbol] || '◯'
 }
 
 // Watch for balance changes to show indicators and refresh on-chain balances
 watch(
-  () => walletStore.config.tokens.map(token => walletStore.getLocalBalance(token.sym)),
+  () => walletStore.config.tokens.map(token => chainBalances.value[token.sym] || 0),
   (newBalances, oldBalances) => {
     if (!oldBalances) return
     
@@ -212,9 +209,9 @@ watch(
 
 // Initialize previous balances
 onMounted(() => {
-  // initialize previous balances using local store
+  // 🔥 Initialize with blockchain balances only!
   walletStore.config.tokens.forEach(token => {
-    previousBalances.value[token.sym] = walletStore.getLocalBalance(token.sym)
+    previousBalances.value[token.sym] = chainBalances.value[token.sym] || 0
   })
 
   // If already connected, fetch real balances

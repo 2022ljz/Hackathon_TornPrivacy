@@ -104,34 +104,10 @@ const marketData = ref([
     totalBorrowed: '2.20M',
     borrowedUSD: 7700000000,
     borrowAPY: '2.65%'
-  },
-  {
-    symbol: 'DAI',
-    totalSupplied: '5.12B',
-    suppliedUSD: 5120000000,
-    supplyAPY: '5.10%',
-    totalBorrowed: '4.66B',
-    borrowedUSD: 4660000000,
-    borrowAPY: '6.20%'
-  },
-  {
-    symbol: 'USDC',
-    totalSupplied: '5.83B',
-    suppliedUSD: 5830000000,
-    supplyAPY: '4.89%',
-    totalBorrowed: '5.05B',
-    borrowedUSD: 5050000000,
-    borrowAPY: '6.32%'
-  },
-  {
-    symbol: 'WBTC',
-    totalSupplied: '43.9K',
-    suppliedUSD: 2853500000,
-    supplyAPY: '0.01%',
-    totalBorrowed: '3.39K',
-    borrowedUSD: 220350000,
-    borrowAPY: '0.39%'
   }
+  // 🔥 DAI, USDC, WBTC REMOVED! 
+  // 🚫 Only ETH is supported on Sepolia testnet!
+  // 🔗 High gas fees make other tokens impractical
 ])
 
 let updateInterval = null
@@ -139,20 +115,18 @@ let updateInterval = null
 // Methods
 function getTokenColor(symbol) {
   const colors = {
-    ETH: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-    DAI: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
-    USDC: 'bg-green-500/20 text-green-300 border border-green-500/30',
-    WBTC: 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+    ETH: 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+    // 🔥 DAI, USDC, WBTC colors REMOVED!
+    // 🚫 Only ETH supported on Sepolia testnet!
   }
   return colors[symbol] || 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
 }
 
 function getTokenName(symbol) {
   const names = {
-    ETH: 'Ethereum',
-    DAI: 'Dai Stablecoin',
-    USDC: 'USD Coin',
-    WBTC: 'Wrapped Bitcoin'
+    ETH: 'Ethereum'
+    // 🔥 Other token names REMOVED!
+    // 🚫 DAI, USDC, WBTC not supported!
   }
   return names[symbol] || symbol
 }

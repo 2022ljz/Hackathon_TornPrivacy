@@ -68,8 +68,8 @@
       <!-- Stats -->
       <div class="grid grid-cols-3 gap-4">
         <div class="stat-card">
-          <div class="text-sm text-mixer-muted mb-1">Local Balance</div>
-          <div v-if="walletStore.isConnected" class="font-mono text-lg text-blue-400">{{ formatNumber(walletStore.getLocalBalance(lendForm.token)) }} {{ lendForm.token }}</div>
+          <div class="text-sm text-mixer-muted mb-1">Blockchain Balance</div>
+          <div v-if="walletStore.isConnected" class="font-mono text-lg text-blue-400">{{ formatNumber(currentBalance) }} {{ lendForm.token }}</div>
           <div v-else class="font-mono text-lg text-gray-500">Connect wallet first</div>
         </div>
         <div class="stat-card">
@@ -180,8 +180,8 @@
       <!-- Withdraw Stats -->
       <div class="grid grid-cols-3 gap-4">
         <div class="stat-card">
-          <div class="text-sm text-mixer-muted mb-1">Local Balance</div>
-          <div v-if="walletStore.isConnected" class="font-mono text-lg text-blue-400">{{ formatNumber(walletStore.getLocalBalance(withdrawInfo.token || 'ETH')) }} {{ withdrawInfo.token || 'ETH' }}</div>
+          <div class="text-sm text-mixer-muted mb-1">Blockchain Balance</div>
+          <div v-if="walletStore.isConnected" class="font-mono text-lg text-blue-400">{{ formatNumber(currentBalance) }} {{ withdrawInfo.token || 'ETH' }}</div>
           <div v-else class="font-mono text-lg text-gray-500">Connect wallet first</div>
         </div>
         <div class="stat-card">
@@ -332,6 +332,13 @@ const showConfirmModal = ref(false)
 const showInvalidModal = ref(false) // Add invalid transaction prompt modal state
 const confirmationInfo = ref({})
 const invalidInfo = ref({}) // Add invalid transaction information
+
+// 🔥 Real blockchain balance computed property
+const currentBalance = computed(() => {
+  if (!walletStore.isConnected) return 0
+  // Use the real getBalance function from wallet store
+  return userBalance.value || 0
+})
 
 // Forms
 const lendForm = ref({
@@ -652,8 +659,8 @@ async function lend() {
     walletStore.persistData()
     console.log('💿 Data persisted to localStorage')
     
-    // Update local balance - Lend operation reduces available balance
-    walletStore.handleLendOperation(token, amount)
+    // 🔥 NO MORE LOCAL BALANCE OPERATIONS!
+    // 🚫 handleLendOperation() removed - only real blockchain!
     
     // Verify data is saved correctly
     const savedData = JSON.parse(localStorage.getItem("mixer-local") || '{}')

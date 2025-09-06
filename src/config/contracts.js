@@ -9,18 +9,20 @@ export default {
             "symbol": "ETH",
             "name": "Ethereum",
             "decimals": 18
-        },
-        "USDC": {
-            "address": "0xCB3A2E90568471eeD7b191AC45747e83bEE6642A",
-            "symbol": "USDC",
-            "name": "USD Coin",
-            "decimals": 6
-        },
-        "DAI": {
-            "address": "0x3a6B9cC96D2FB5bCA277C0A222CE16Ab6bAeF5B4",
-            "symbol": "DAI",
-            "name": "Dai Stablecoin",
-            "decimals": 18
         }
+        // 暂时禁用USDC和DAI，因为在Sepolia上费用过高
+        // 等验证合约部署状态后再启用其他代币
+        // "USDC": {
+        //     "address": "0xCB3A2E90568471eeD7b191AC45747e83bEE6642A",
+        //     "symbol": "USDC",
+        //     "name": "USD Coin",
+        //     "decimals": 6
+        // },
+        // "DAI": {
+        //     "address": "0x3a6B9cC96D2FB5bCA277C0A222CE16Ab6bAeF5B4",
+        //     "symbol": "DAI",
+        //     "name": "Dai Stablecoin",
+        //     "decimals": 18
+        // }
     }
 };
