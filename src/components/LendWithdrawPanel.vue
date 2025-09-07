@@ -610,29 +610,69 @@ async function approveLend() {
     const token = lendForm.value.token
     const amount = Number(lendForm.value.amount)
     
+    console.log('🔐 Starting ERC-20 token approval for privacy transaction...')
+    
+    // 🔍 获取代币合约
     const contract = await walletStore.getTokenContract(token)
     if (!contract) {
       notificationStore.warning(
         'No Approval Needed', 
-        'Native ETH does not require approval; for ERC20 tokens, please set contract address in Config'
+        'Native ETH does not require approval. ERC-20 tokens will be approved for privacy transactions.'
       )
       return
     }
     
-    const spender = walletStore.config.mixerAddr || walletStore.config.lendingAddr
+    // 🎯 获取Mixer合约地址作为spender（隐私交易的核心）
+    const spender = walletStore.config.mixerAddr
     if (!spender) {
       notificationStore.error(
-        'Missing Contract Address', 
-        'Please set Mixer or Lending contract address in Config for real approvals'
+        'Missing Mixer Contract', 
+        'Mixer contract address is required for privacy token transactions'
       )
       return
     }
     
-    // Simulate approval for demo
-    notificationStore.success('Approval Sent', `Approved ${amount} ${token}`)
+    // 💰 将金额转换为wei单位
+    const amountWei = ethers.parseUnits(amount.toString(), contract.decimals)
+    
+    // 🔍 检查当前allowance
+    try {
+      const currentAllowance = await contract.allowance(walletStore.address, spender)
+      console.log('📊 Current allowance:', ethers.formatUnits(currentAllowance, contract.decimals), token)
+      
+      if (currentAllowance >= amountWei) {
+        notificationStore.success(
+          'Already Approved', 
+          `${token} tokens are already approved for privacy transactions. Current allowance: ${ethers.formatUnits(currentAllowance, contract.decimals)} ${token}`
+        )
+        return
+      }
+    } catch (allowanceError) {
+      console.warn('⚠️ Could not check current allowance:', allowanceError)
+    }
+    
+    // 🚀 执行真实的approve交易
+    console.log('🔐 Approving', ethers.formatUnits(amountWei, contract.decimals), token, 'for Mixer contract:', spender)
+    const txHash = await contract.approve(spender, amountWei)
+    
+    console.log('✅ Approval transaction sent to blockchain:', txHash)
+    
+    notificationStore.success(
+      '🔐 Privacy Token Approved', 
+      `Successfully approved ${amount} ${token} for privacy transactions!\n\n` +
+      `Transaction Hash: ${txHash}\n` +
+      `Mixer Contract: ${spender}\n\n` +
+      `Your ${token} tokens can now be used for private lending through the Tornado Privacy Protocol.\n\n` +
+      `🔗 View on Etherscan:\nhttps://sepolia.etherscan.io/tx/${txHash}`,
+      15000
+    )
     
   } catch (error) {
-    notificationStore.error('Approval Failed', error.message)
+    console.error('❌ Approval failed:', error)
+    notificationStore.error(
+      'Approval Failed', 
+      `Failed to approve ${token} tokens: ${error.message}\n\nPlease ensure:\n• You have sufficient ${token} balance\n• MetaMask is connected\n• You have enough ETH for gas fees`
+    )
   } finally {
     isApproving.value = false
   }

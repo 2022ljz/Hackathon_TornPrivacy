@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏆 ERC-20 竞赛验证页面</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff6b6b, #feca57);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .status-bar {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            border-left: 5px solid #28a745;
+        }
+
+        .section {
+            margin: 30px 0;
+            padding: 25px;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .section:hover {
+            border-color: #007bff;
+            box-shadow: 0 5px 15px rgba(0, 123, 255, 0.1);
+        }
+
+        .section h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .success {
+            background: linear-gradient(135deg, #d4edda, #c3e6cb);
+            color: #155724;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            border-left: 5px solid #28a745;
+        }
+
+        .error {
+            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            border-left: 5px solid #dc3545;
+        }
+
+        .info {
+            background: linear-gradient(135deg, #d1ecf1, #bee5eb);
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            border-left: 5px solid #17a2b8;
+        }
+
+        .warning {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            color: #856404;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            border-left: 5px solid #ffc107;
+        }
+
+        button {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        input {
+            padding: 12px 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 100%;
+            max-width: 400px;
+            margin: 8px;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
+        .input-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .code {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border-left: 4px solid #007bff;
+            word-break: break-all;
+        }
+
+        .logs {
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .input-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            input {
+                max-width: none;
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏆 ERC-20 Token 竞赛验证系统</h1>
+            <p>Privacy Token (TPT) - 符合比赛要求的完整ERC-20实现</p>
+        </div>
+
+        <div class="content">
+            <div class="status-bar">
+                <h3>📊 系统状态</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressBar"></div>
+                </div>
+                <div id="systemStatus">初始化中...</div>
+            </div>
+
+            <div class="grid">
+                <div class="section">
+                    <h3>🔗 钱包连接</h3>
+                    <button id="connectBtn" onclick="connectWallet()">连接 MetaMask</button>
+                    <div id="walletStatus"></div>
+                    <div class="info" style="margin-top: 15px;">
+                        <strong>📝 要求:</strong><br>
+                        • 需要 MetaMask 钱包<br>
+                        • 切换到本地网络 (Chain ID: 31337)<br>
+                        • 确保本地节点运行中
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🏛️ 合约信息</h3>
+                    <button onclick="getContractInfo()">获取合约详情</button>
+                    <div id="contractInfo"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>💰 余额查询</h3>
+                <button onclick="checkBalance()">查看 TPT 余额</button>
+                <button onclick="checkETHBalance()">查看 ETH 余额</button>
+                <div id="balanceStatus"></div>
+            </div>
+
+            <div class="section">
+                <h3>✅ Approve 授权功能 (比赛核心要求)</h3>
+                <div class="warning">
+                    <strong>🎯 比赛验证点:</strong> 这是比赛要求的核心功能，必须通过ERC-20 approve机制进行代币授权
+                </div>
+                <div class="input-group">
+                    <input type="text" id="spenderAddress" placeholder="授权给的地址 (0x...)" />
+                    <input type="number" id="approveAmount" placeholder="授权数量" value="100" />
+                    <button onclick="approveTokens()">🔐 执行 Approve 授权</button>
+                </div>
+                <div id="approveStatus"></div>
+            </div>
+
+            <div class="section">
+                <h3>🔍 授权额度查询</h3>
+                <div class="input-group">
+                    <input type="text" id="checkSpenderAddress" placeholder="查询授权给的地址 (0x...)" />
+                    <button onclick="checkAllowance()">查询 Allowance</button>
+                </div>
+                <div id="allowanceStatus"></div>
+            </div>
+
+            <div class="section">
+                <h3>💸 转账测试</h3>
+                <div class="input-group">
+                    <input type="text" id="transferTo" placeholder="接收地址 (0x...)" />
+                    <input type="number" id="transferAmount" placeholder="转账数量" value="10" />
+                    <button onclick="transferTokens()">发送 TPT</button>
+                </div>
+                <div id="transferStatus"></div>
+            </div>
+
+            <div class="section">
+                <h3>🧪 批量操作测试</h3>
+                <button onclick="runFullTest()">🚀 运行完整测试套件</button>
+                <div id="testResults"></div>
+            </div>
+
+            <div class="section">
+                <h3>📜 操作日志</h3>
+                <div id="logs" class="logs"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 使用可靠的CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+        const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+        const CHAIN_ID = 31337;
+
+        // 完整的ERC-20 ABI
+        const ERC20_ABI = [
+            "function name() view returns (string)",
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)",
+            "function totalSupply() view returns (uint256)",
+            "function balanceOf(address owner) view returns (uint256)",
+            "function transfer(address to, uint256 amount) returns (bool)",
+            "function approve(address spender, uint256 amount) returns (bool)",
+            "function allowance(address owner, address spender) view returns (uint256)",
+            "event Transfer(address indexed from, address indexed to, uint256 value)",
+            "event Approval(address indexed owner, address indexed spender, uint256 value)"
+        ];
+
+        let provider, signer, contract, userAddress;
+        let testsPassed = 0;
+        let totalTests = 5;
+
+        function updateProgress() {
+            const percentage = (testsPassed / totalTests) * 100;
+            document.getElementById('progressBar').style.width = percentage + '%';
+        }
+
+        function log(message, type = 'info') {
+            console.log(message);
+            const timestamp = new Date().toLocaleTimeString();
+            const color = {
+                'info': '#00ff00',
+                'error': '#ff4444',
+                'warning': '#ffaa00',
+                'success': '#00ff88'
+            }[type] || '#00ff00';
+
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        async function initSystem() {
+            try {
+                document.getElementById('systemStatus').innerHTML = "🔍 检查环境...";
+
+                // 检查ethers
+                if (typeof ethers === 'undefined') {
+                    throw new Error('Ethers.js 库未加载');
+                }
+                log('✅ Ethers.js 库加载成功', 'success');
+
+                // 检查MetaMask
+                if (typeof window.ethereum === 'undefined') {
+                    throw new Error('未检测到 MetaMask');
+                }
+                log('✅ MetaMask 检测成功', 'success');
+
+                document.getElementById('systemStatus').innerHTML = "✅ 系统就绪 - 请连接钱包开始测试";
+                testsPassed = 1;
+                updateProgress();
+
+            } catch (error) {
+                document.getElementById('systemStatus').innerHTML = `❌ 系统错误: ${error.message}`;
+                log(`❌ 系统初始化失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function connectWallet() {
+            try {
+                log('🔄 正在连接钱包...', 'info');
+
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                if (accounts.length === 0) {
+                    throw new Error('未找到账户');
+                }
+
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                userAddress = await signer.getAddress();
+
+                // 检查网络
+                const network = await provider.getNetwork();
+                if (network.chainId !== CHAIN_ID) {
+                    throw new Error(`请切换到本地网络 (Chain ID: ${CHAIN_ID}), 当前: ${network.chainId}`);
+                }
+
+                contract = new ethers.Contract(CONTRACT_ADDRESS, ERC20_ABI, signer);
+
+                document.getElementById('walletStatus').innerHTML =
+                    `<div class="success">✅ 钱包已连接<br/>地址: ${userAddress}<br/>网络: Chain ID ${network.chainId}</div>`;
+
+                log(`✅ 钱包连接成功: ${userAddress}`, 'success');
+                testsPassed = 2;
+                updateProgress();
+
+                // 自动获取合约信息
+                await getContractInfo();
+
+            } catch (error) {
+                document.getElementById('walletStatus').innerHTML =
+                    `<div class="error">❌ 连接失败: ${error.message}</div>`;
+                log(`❌ 钱包连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function getContractInfo() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                log('🔄 获取合约信息...', 'info');
+
+                const [name, symbol, decimals, totalSupply] = await Promise.all([
+                    contract.name(),
+                    contract.symbol(),
+                    contract.decimals(),
+                    contract.totalSupply()
+                ]);
+
+                const formattedSupply = ethers.utils.formatUnits(totalSupply, decimals);
+
+                document.getElementById('contractInfo').innerHTML = `
+                    <div class="success">
+                        <strong>📋 合约详情:</strong><br/>
+                        <div class="code">
+                            名称: ${name}<br/>
+                            符号: ${symbol}<br/>
+                            精度: ${decimals}<br/>
+                            总供应量: ${formattedSupply}<br/>
+                            合约地址: ${CONTRACT_ADDRESS}
+                        </div>
+                    </div>
+                `;
+
+                log(`✅ 合约信息获取成功: ${name} (${symbol})`, 'success');
+                testsPassed = 3;
+                updateProgress();
+
+            } catch (error) {
+                document.getElementById('contractInfo').innerHTML =
+                    `<div class="error">❌ 获取失败: ${error.message}</div>`;
+                log(`❌ 合约信息获取失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkBalance() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const balance = await contract.balanceOf(userAddress);
+                const decimals = await contract.decimals();
+                const formattedBalance = ethers.utils.formatUnits(balance, decimals);
+
+                document.getElementById('balanceStatus').innerHTML =
+                    `<div class="success">💰 TPT 余额: ${formattedBalance}</div>`;
+
+                log(`💰 余额查询成功: ${formattedBalance} TPT`, 'success');
+
+            } catch (error) {
+                document.getElementById('balanceStatus').innerHTML =
+                    `<div class="error">❌ 查询失败: ${error.message}</div>`;
+                log(`❌ 余额查询失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkETHBalance() {
+            try {
+                if (!provider) throw new Error('请先连接钱包');
+
+                const balance = await provider.getBalance(userAddress);
+                const formattedBalance = ethers.utils.formatEther(balance);
+
+                document.getElementById('balanceStatus').innerHTML +=
+                    `<div class="info">⚡ ETH 余额: ${formattedBalance}</div>`;
+
+                log(`⚡ ETH余额: ${formattedBalance} ETH`, 'info');
+
+            } catch (error) {
+                log(`❌ ETH余额查询失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function approveTokens() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const spender = document.getElementById('spenderAddress').value;
+                const amount = document.getElementById('approveAmount').value;
+
+                if (!spender || !amount) throw new Error('请输入授权地址和数量');
+
+                const decimals = await contract.decimals();
+                const amountWei = ethers.utils.parseUnits(amount, decimals);
+
+                log(`🔄 开始执行 Approve: ${amount} TPT 授权给 ${spender}`, 'info');
+
+                const tx = await contract.approve(spender, amountWei);
+
+                document.getElementById('approveStatus').innerHTML =
+                    `<div class="info">⏳ Approve 交易提交中...<br/>TxHash: ${tx.hash}</div>`;
+
+                log(`📤 Approve交易提交: ${tx.hash}`, 'info');
+
+                const receipt = await tx.wait();
+
+                document.getElementById('approveStatus').innerHTML =
+                    `<div class="success">🎉 Approve 授权成功！<br/>Gas费用: ${receipt.gasUsed.toString()}<br/>这是比赛要求的核心功能 ✅</div>`;
+
+                log(`🎉 Approve授权成功! Gas: ${receipt.gasUsed}`, 'success');
+                testsPassed = 4;
+                updateProgress();
+
+            } catch (error) {
+                document.getElementById('approveStatus').innerHTML =
+                    `<div class="error">❌ Approve失败: ${error.message}</div>`;
+                log(`❌ Approve失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkAllowance() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const spender = document.getElementById('checkSpenderAddress').value;
+                if (!spender) throw new Error('请输入查询地址');
+
+                const allowance = await contract.allowance(userAddress, spender);
+                const decimals = await contract.decimals();
+                const formattedAllowance = ethers.utils.formatUnits(allowance, decimals);
+
+                document.getElementById('allowanceStatus').innerHTML =
+                    `<div class="success">🔍 当前授权额度: ${formattedAllowance} TPT</div>`;
+
+                log(`🔍 授权额度查询: ${formattedAllowance} TPT`, 'info');
+
+            } catch (error) {
+                document.getElementById('allowanceStatus').innerHTML =
+                    `<div class="error">❌ 查询失败: ${error.message}</div>`;
+                log(`❌ 授权额度查询失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function transferTokens() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const to = document.getElementById('transferTo').value;
+                const amount = document.getElementById('transferAmount').value;
+
+                if (!to || !amount) throw new Error('请输入接收地址和转账数量');
+
+                const decimals = await contract.decimals();
+                const amountWei = ethers.utils.parseUnits(amount, decimals);
+
+                log(`🔄 开始转账: ${amount} TPT 到 ${to}`, 'info');
+
+                const tx = await contract.transfer(to, amountWei);
+
+                document.getElementById('transferStatus').innerHTML =
+                    `<div class="info">⏳ 转账提交中...<br/>TxHash: ${tx.hash}</div>`;
+
+                log(`📤 转账提交: ${tx.hash}`, 'info');
+
+                const receipt = await tx.wait();
+
+                document.getElementById('transferStatus').innerHTML =
+                    `<div class="success">✅ 转账成功！<br/>Gas费用: ${receipt.gasUsed.toString()}</div>`;
+
+                log(`✅ 转账成功! Gas: ${receipt.gasUsed}`, 'success');
+                testsPassed = 5;
+                updateProgress();
+
+            } catch (error) {
+                document.getElementById('transferStatus').innerHTML =
+                    `<div class="error">❌ 转账失败: ${error.message}</div>`;
+                log(`❌ 转账失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function runFullTest() {
+            try {
+                log('🚀 开始运行完整测试套件...', 'info');
+                document.getElementById('testResults').innerHTML = '<div class="info">🔄 正在运行测试...</div>';
+
+                const tests = [
+                    { name: '合约信息获取', func: getContractInfo },
+                    { name: '余额查询', func: checkBalance },
+                    { name: 'ETH余额查询', func: checkETHBalance },
+                ];
+
+                for (const test of tests) {
+                    log(`🧪 测试: ${test.name}`, 'info');
+                    await test.func();
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒
+                }
+
+                document.getElementById('testResults').innerHTML =
+                    `<div class="success">🎉 所有测试完成！请手动测试 Approve 和转账功能以满足比赛要求。</div>`;
+
+                log('🎉 完整测试套件执行完毕', 'success');
+
+            } catch (error) {
+                document.getElementById('testResults').innerHTML =
+                    `<div class="error">❌ 测试失败: ${error.message}</div>`;
+                log(`❌ 测试套件失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后初始化
+        window.onload = function () {
+            log('🌟 ERC-20 竞赛验证系统启动', 'success');
+
+            // 填充测试地址
+            document.getElementById('spenderAddress').value = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+            document.getElementById('checkSpenderAddress').value = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+            document.getElementById('transferTo').value = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
+
+            // 初始化系统
+            setTimeout(initSystem, 500);
+        };
+
+        // 监听账户变化
+        if (typeof window.ethereum !== 'undefined') {
+            window.ethereum.on('accountsChanged', function (accounts) {
+                if (accounts.length === 0) {
+                    log('🔌 钱包已断开连接', 'warning');
+                    location.reload();
+                } else {
+                    log('🔄 账户已切换，正在重新连接...', 'info');
+                    connectWallet();
+                }
+            });
+
+            window.ethereum.on('chainChanged', function (chainId) {
+                log(`🔄 网络已切换到: ${chainId}`, 'info');
+                location.reload();
+            });
+        }
+    </script>
+</body>
+
+</html>

@@ -40,7 +40,7 @@
       ]
     },
     "/Users/gigg1ty/Documents/GitHub/Hackthon_TornPrivacy/Contracts/Mixer.sol": {
-      "lastModificationDate": 1757070204755,
+      "lastModificationDate": 1757070577642,
       "contentHash": "cd5004365ec68cbae0957924190b03e0",
       "sourceName": "Contracts/Mixer.sol",
       "solcConfig": {
@@ -114,8 +114,8 @@
       ]
     },
     "/Users/gigg1ty/Documents/GitHub/Hackthon_TornPrivacy/Contracts/IERC20.sol": {
-      "lastModificationDate": 1757066579911,
-      "contentHash": "bb27d283b52a62a08fd222f7f33d4595",
+      "lastModificationDate": 1757239729014,
+      "contentHash": "768c615e5ca7ea09e7fbdad9ad90b2d9",
       "sourceName": "Contracts/IERC20.sol",
       "solcConfig": {
         "version": "0.8.17",
@@ -185,7 +185,7 @@
       ]
     },
     "/Users/gigg1ty/Documents/GitHub/Hackthon_TornPrivacy/Contracts/GasProfiler.sol": {
-      "lastModificationDate": 1757076552445,
+      "lastModificationDate": 1757079063647,
       "contentHash": "b5417d2bd523f3f9c15e22e85afbfbbc",
       "sourceName": "Contracts/GasProfiler.sol",
       "solcConfig": {
@@ -219,6 +219,43 @@
       ],
       "artifacts": [
         "GasProfiler"
+      ]
+    },
+    "/Users/gigg1ty/Documents/GitHub/Hackthon_TornPrivacy/Contracts/PrivacyToken.sol": {
+      "lastModificationDate": 1757239706764,
+      "contentHash": "dc35e17e0e66445d38ae0c97ea6c8e2e",
+      "sourceName": "Contracts/PrivacyToken.sol",
+      "solcConfig": {
+        "version": "0.8.17",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.17"
+      ],
+      "artifacts": [
+        "PrivacyToken"
       ]
     }
   }

@@ -23,10 +23,14 @@ export const useWalletStore = defineStore('wallet', () => {
         lendingAddr: contractsConfig.LENDING_POOL_ADDRESS,
         mixerAddr: contractsConfig.MIXER_ADDRESS,
         tokens: [
-            { sym: "ETH", addr: "0x0000000000000000000000000000000000000000", decimals: 18, price: 3500 }
-            // 暂时只保留ETH，等验证其他代币合约后再添加
-            // { sym: "DAI", addr: contractsConfig.TOKENS.DAI.address, decimals: 18, price: 1 },
-            // { sym: "USDC", addr: contractsConfig.TOKENS.USDC.address, decimals: 6, price: 1 },
+            { sym: "ETH", addr: "0x0000000000000000000000000000000000000000", decimals: 18, price: 3500 },
+            // 🌟 新增ERC-20隐私代币支持
+            { sym: "PVT", addr: contractsConfig.TOKENS.PVT?.address || "0x1234567890123456789012345678901234567890", decimals: 18, price: 1 },
+            { sym: "USDT", addr: contractsConfig.TOKENS.USDT?.address || "0x2345678901234567890123456789012345678901", decimals: 6, price: 1 },
+            { sym: "USDC", addr: contractsConfig.TOKENS.USDC?.address || "0x3456789012345678901234567890123456789012", decimals: 6, price: 1 },
+            { sym: "DAI", addr: contractsConfig.TOKENS.DAI?.address || "0x4567890123456789012345678901234567890123", decimals: 18, price: 1 }
+            // 💡 真实地址将在部署ERC-20合约后更新
+            // 🔐 所有代币都支持approve机制的隐私交易
         ],
     })
 
@@ -333,16 +337,73 @@ export const useWalletStore = defineStore('wallet', () => {
             token.addr === ethers.ZeroAddress
         if (isEth) return null
 
-        // 返回一个简化的合约对象，避免 ethers 合约实例
+        // 返回一个功能完整的ERC-20合约对象
         return {
             address: token.addr,
             symbol: symbol,
             decimals: token.decimals,
+
             // 简化的 balanceOf 调用
             balanceOf: async (userAddress) => {
                 const balanceOfSignature = '0x70a08231' // balanceOf(address)
                 const paddedAddress = userAddress.slice(2).padStart(64, '0')
                 const callData = balanceOfSignature + paddedAddress
+
+                const result = await window.ethereum.request({
+                    method: 'eth_call',
+                    params: [{
+                        to: token.addr,
+                        data: callData
+                    }, 'latest']
+                })
+
+                return result ? ethers.getBigInt(result) : 0n
+            },
+
+            // 🌟 新增: ERC-20 approve 功能
+            approve: async (spender, amount) => {
+                if (!address.value) {
+                    throw new Error('Wallet not connected')
+                }
+
+                // 构造approve函数调用数据
+                // approve(address spender, uint256 amount)
+                const approveSignature = '0x095ea7b3' // approve(address,uint256)
+                const paddedSpender = spender.slice(2).padStart(64, '0')
+
+                // 将金额转换为hex，并填充到64字符
+                let amountHex = ethers.getBigInt(amount).toString(16)
+                amountHex = amountHex.padStart(64, '0')
+
+                const callData = approveSignature + paddedSpender + amountHex
+
+                console.log('🔐 Approving ERC-20 token:', {
+                    token: symbol,
+                    spender: spender,
+                    amount: amount.toString(),
+                    callData: callData
+                })
+
+                const txHash = await window.ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [{
+                        from: address.value,
+                        to: token.addr,
+                        data: callData,
+                        value: '0x0'
+                    }]
+                })
+
+                console.log('✅ Approve transaction sent:', txHash)
+                return txHash
+            },
+
+            // 🔍 检查allowance
+            allowance: async (owner, spender) => {
+                const allowanceSignature = '0xdd62ed3e' // allowance(address,address)
+                const paddedOwner = owner.slice(2).padStart(64, '0')
+                const paddedSpender = spender.slice(2).padStart(64, '0')
+                const callData = allowanceSignature + paddedOwner + paddedSpender
 
                 const result = await window.ethereum.request({
                     method: 'eth_call',

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERC-20 Approve功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            width: 300px;
+            margin: 5px;
+        }
+
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .code {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔐 ERC-20 Approve功能测试</h1>
+
+        <div class="info">
+            <h3>📋 测试说明</h3>
+            <p>这个页面用于测试我们的Privacy Token (TPT)的ERC-20标准approve功能</p>
+            <p><strong>合约地址:</strong> <span class="code">0x5FbDB2315678afecb367f032d93F642f64180aa3</span></p>
+            <p><strong>网络:</strong> Localhost (Chain ID: 31337)</p>
+        </div>
+
+        <div class="section">
+            <h3>🔗 1. 连接钱包</h3>
+            <button id="connectBtn" onclick="connectWallet()">连接MetaMask</button>
+            <div id="walletStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>💰 2. 查看余额</h3>
+            <button onclick="checkBalance()">查看TPT余额</button>
+            <div id="balanceStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>✅ 3. Approve授权</h3>
+            <input type="text" id="spenderAddress" placeholder="授权地址 (0x...)" />
+            <input type="number" id="approveAmount" placeholder="授权数量" value="100" />
+            <button onclick="approveTokens()">授权 TPT</button>
+            <div id="approveStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>🔍 4. 查看授权额度</h3>
+            <input type="text" id="checkSpenderAddress" placeholder="查询地址 (0x...)" />
+            <button onclick="checkAllowance()">查询授权额度</button>
+            <div id="allowanceStatus"></div>
+        </div>
+
+        <div class="section">
+            <h3>💸 5. 转账测试</h3>
+            <input type="text" id="transferTo" placeholder="接收地址 (0x...)" />
+            <input type="number" id="transferAmount" placeholder="转账数量" value="10" />
+            <button onclick="transferTokens()">转账 TPT</button>
+            <div id="transferStatus"></div>
+        </div>
+
+        <div id="logs" class="section" style="display: none;">
+            <h3>📜 操作日志</h3>
+            <div id="logContent" class="code"></div>
+        </div>
+    </div>
+
+    <!-- 使用多个CDN备选 -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script>
+        // 检查ethers是否加载成功
+        if (typeof ethers === 'undefined') {
+            console.error('Ethers.js 加载失败，尝试备用CDN...');
+            document.write('<script src="https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"><\/script>');
+        }
+
+        const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+        const CHAIN_ID = 31337;
+
+        // ERC-20 ABI (简化版)
+        const ERC20_ABI = [
+            "function name() view returns (string)",
+            "function symbol() view returns (string)",
+            "function decimals() view returns (uint8)",
+            "function totalSupply() view returns (uint256)",
+            "function balanceOf(address owner) view returns (uint256)",
+            "function transfer(address to, uint256 amount) returns (bool)",
+            "function approve(address spender, uint256 amount) returns (bool)",
+            "function allowance(address owner, address spender) view returns (uint256)",
+            "event Transfer(address indexed from, address indexed to, uint256 value)",
+            "event Approval(address indexed owner, address indexed spender, uint256 value)"
+        ];
+
+        let provider, signer, contract, userAddress;
+
+        function log(message, type = 'info') {
+            console.log(message);
+            const logsDiv = document.getElementById('logs');
+            const logContent = document.getElementById('logContent');
+            logsDiv.style.display = 'block';
+            const timestamp = new Date().toLocaleTimeString();
+            logContent.innerHTML += `[${timestamp}] ${message}\n`;
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        async function connectWallet() {
+            try {
+                // 检查ethers是否已加载
+                if (typeof ethers === 'undefined') {
+                    throw new Error('ethers.js 库未正确加载，请刷新页面重试');
+                }
+
+                if (typeof window.ethereum !== 'undefined') {
+                    // 先请求连接账户
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    if (accounts.length === 0) {
+                        throw new Error('未找到账户，请确认MetaMask已解锁');
+                    }
+
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    userAddress = await signer.getAddress();
+
+                    // 检查网络
+                    const network = await provider.getNetwork();
+                    if (network.chainId !== CHAIN_ID) {
+                        throw new Error(`请切换到本地网络 (Chain ID: ${CHAIN_ID}), 当前: ${network.chainId}`);
+                    }
+
+                    contract = new ethers.Contract(CONTRACT_ADDRESS, ERC20_ABI, signer);
+
+                    document.getElementById('walletStatus').innerHTML =
+                        `<div class="success">✅ 钱包已连接: ${userAddress}<br/>网络: ${network.name || 'localhost'} (${network.chainId})</div>`;
+
+                    log(`钱包连接成功: ${userAddress}`);
+                    log(`网络: ${network.name || 'localhost'} (Chain ID: ${network.chainId})`);
+
+                    // 获取基本信息
+                    try {
+                        const name = await contract.name();
+                        const symbol = await contract.symbol();
+                        const decimals = await contract.decimals();
+                        log(`合约信息: ${name} (${symbol}), 精度: ${decimals}`);
+                    } catch (contractError) {
+                        log(`合约信息获取失败: ${contractError.message}`, 'error');
+                        throw new Error(`无法连接到合约，请确认合约已部署: ${contractError.message}`);
+                    }
+
+                } else {
+                    throw new Error('请安装MetaMask钱包');
+                }
+            } catch (error) {
+                document.getElementById('walletStatus').innerHTML =
+                    `<div class="error">❌ 连接失败: ${error.message}</div>`;
+                log(`连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkBalance() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const balance = await contract.balanceOf(userAddress);
+                const decimals = await contract.decimals();
+                const formattedBalance = ethers.utils.formatUnits(balance, decimals);
+
+                document.getElementById('balanceStatus').innerHTML =
+                    `<div class="success">💰 您的TPT余额: ${formattedBalance}</div>`;
+
+                log(`余额查询: ${formattedBalance} TPT`);
+
+            } catch (error) {
+                document.getElementById('balanceStatus').innerHTML =
+                    `<div class="error">❌ 查询失败: ${error.message}</div>`;
+                log(`余额查询失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function approveTokens() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const spender = document.getElementById('spenderAddress').value;
+                const amount = document.getElementById('approveAmount').value;
+
+                if (!spender || !amount) throw new Error('请输入授权地址和数量');
+
+                const decimals = await contract.decimals();
+                const amountWei = ethers.utils.parseUnits(amount, decimals);
+
+                log(`开始授权: ${amount} TPT 给 ${spender}`);
+
+                const tx = await contract.approve(spender, amountWei);
+
+                document.getElementById('approveStatus').innerHTML =
+                    `<div class="info">⏳ 交易提交中... TxHash: ${tx.hash}</div>`;
+
+                log(`交易提交: ${tx.hash}`);
+
+                const receipt = await tx.wait();
+
+                document.getElementById('approveStatus').innerHTML =
+                    `<div class="success">✅ 授权成功！Gas费用: ${receipt.gasUsed.toString()}</div>`;
+
+                log(`授权成功! Gas: ${receipt.gasUsed.toString()}`);
+
+            } catch (error) {
+                document.getElementById('approveStatus').innerHTML =
+                    `<div class="error">❌ 授权失败: ${error.message}</div>`;
+                log(`授权失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkAllowance() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const spender = document.getElementById('checkSpenderAddress').value;
+                if (!spender) throw new Error('请输入查询地址');
+
+                const allowance = await contract.allowance(userAddress, spender);
+                const decimals = await contract.decimals();
+                const formattedAllowance = ethers.utils.formatUnits(allowance, decimals);
+
+                document.getElementById('allowanceStatus').innerHTML =
+                    `<div class="success">🔍 授权额度: ${formattedAllowance} TPT</div>`;
+
+                log(`授权额度查询: ${formattedAllowance} TPT 给 ${spender}`);
+
+            } catch (error) {
+                document.getElementById('allowanceStatus').innerHTML =
+                    `<div class="error">❌ 查询失败: ${error.message}</div>`;
+                log(`授权额度查询失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function transferTokens() {
+            try {
+                if (!contract) throw new Error('请先连接钱包');
+
+                const to = document.getElementById('transferTo').value;
+                const amount = document.getElementById('transferAmount').value;
+
+                if (!to || !amount) throw new Error('请输入接收地址和转账数量');
+
+                const decimals = await contract.decimals();
+                const amountWei = ethers.utils.parseUnits(amount, decimals);
+
+                log(`开始转账: ${amount} TPT 到 ${to}`);
+
+                const tx = await contract.transfer(to, amountWei);
+
+                document.getElementById('transferStatus').innerHTML =
+                    `<div class="info">⏳ 转账提交中... TxHash: ${tx.hash}</div>`;
+
+                log(`转账提交: ${tx.hash}`);
+
+                const receipt = await tx.wait();
+
+                document.getElementById('transferStatus').innerHTML =
+                    `<div class="success">✅ 转账成功！Gas费用: ${receipt.gasUsed.toString()}</div>`;
+
+                log(`转账成功! Gas: ${receipt.gasUsed.toString()}`);
+
+            } catch (error) {
+                document.getElementById('transferStatus').innerHTML =
+                    `<div class="error">❌ 转账失败: ${error.message}</div>`;
+                log(`转账失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后的初始化
+        window.onload = function () {
+            console.log('页面加载完成');
+
+            // 检查ethers库是否加载
+            if (typeof ethers === 'undefined') {
+                document.getElementById('walletStatus').innerHTML =
+                    `<div class="error">❌ ethers.js库加载失败，请检查网络连接并刷新页面</div>`;
+                log('ethers.js库未加载', 'error');
+                return;
+            } else {
+                log(`ethers.js库加载成功，版本: ${ethers.version || '未知'}`);
+            }
+
+            // 检查MetaMask
+            if (typeof window.ethereum === 'undefined') {
+                document.getElementById('walletStatus').innerHTML =
+                    `<div class="error">❌ 未检测到MetaMask，请先安装MetaMask钱包</div>`;
+                log('未检测到MetaMask', 'error');
+            } else {
+                log('检测到MetaMask');
+            }
+
+            // 填充测试地址
+            document.getElementById('spenderAddress').value = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+            document.getElementById('checkSpenderAddress').value = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+            document.getElementById('transferTo').value = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
+
+            log('测试页面初始化完成');
+        };
+    </script>
+</body>
+
+</html>
