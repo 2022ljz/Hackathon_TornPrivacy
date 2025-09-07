@@ -100,14 +100,76 @@ const marketData = ref([
     symbol: 'ETH',
     totalSupplied: '2.47M',
     suppliedUSD: 8645000000,
-    supplyAPY: '2.00%',
+    supplyAPY: '2.08%',
     totalBorrowed: '2.20M',
     borrowedUSD: 7700000000,
-    borrowAPY: '2.65%'
+    borrowAPY: '2.66%'
+  },
+  {
+    symbol: 'USDC',
+    totalSupplied: '1.82B',
+    suppliedUSD: 1820000000,
+    supplyAPY: '4.15%',
+    totalBorrowed: '1.45B',
+    borrowedUSD: 1450000000,
+    borrowAPY: '5.22%'
+  },
+  {
+    symbol: 'USDT',
+    totalSupplied: '987M',
+    suppliedUSD: 987000000,
+    supplyAPY: '3.89%',
+    totalBorrowed: '734M',
+    borrowedUSD: 734000000,
+    borrowAPY: '4.93%'
+  },
+  {
+    symbol: 'DAI',
+    totalSupplied: '456M',
+    suppliedUSD: 456000000,
+    supplyAPY: '3.67%',
+    totalBorrowed: '298M',
+    borrowedUSD: 298000000,
+    borrowAPY: '4.58%'
+  },
+  {
+    symbol: 'WBTC',
+    totalSupplied: '12.5K',
+    suppliedUSD: 542000000,
+    supplyAPY: '1.95%',
+    totalBorrowed: '8.7K',
+    borrowedUSD: 378000000,
+    borrowAPY: '2.84%'
+  },
+  {
+    symbol: 'LINK',
+    totalSupplied: '25.6M',
+    suppliedUSD: 384000000,
+    supplyAPY: '2.45%',
+    totalBorrowed: '18.9M',
+    borrowedUSD: 283500000,
+    borrowAPY: '3.72%'
+  },
+  {
+    symbol: 'UNI',
+    totalSupplied: '34.2M',
+    suppliedUSD: 273600000,
+    supplyAPY: '2.89%',
+    totalBorrowed: '22.1M',
+    borrowedUSD: 176800000,
+    borrowAPY: '4.12%'
+  },
+  {
+    symbol: 'AAVE',
+    totalSupplied: '1.89M',
+    suppliedUSD: 189000000,
+    supplyAPY: '1.76%',
+    totalBorrowed: '1.23M',
+    borrowedUSD: 123000000,
+    borrowAPY: '2.95%'
   }
-  // 🔥 DAI, USDC, WBTC REMOVED! 
-  // 🚫 Only ETH is supported on Sepolia testnet!
-  // 🔗 High gas fees make other tokens impractical
+  // 🌟 新增多种主流DeFi代币支持
+  // 💡 包含稳定币、主流代币和DeFi协议代币
 ])
 
 let updateInterval = null
@@ -115,18 +177,28 @@ let updateInterval = null
 // Methods
 function getTokenColor(symbol) {
   const colors = {
-    ETH: 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-    // 🔥 DAI, USDC, WBTC colors REMOVED!
-    // 🚫 Only ETH supported on Sepolia testnet!
+    ETH: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
+    USDC: 'bg-blue-600/20 text-blue-400 border border-blue-600/30',
+    USDT: 'bg-green-500/20 text-green-300 border border-green-500/30',
+    DAI: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
+    WBTC: 'bg-orange-500/20 text-orange-300 border border-orange-500/30',
+    LINK: 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
+    UNI: 'bg-pink-500/20 text-pink-300 border border-pink-500/30',
+    AAVE: 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
   }
   return colors[symbol] || 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
 }
 
 function getTokenName(symbol) {
   const names = {
-    ETH: 'Ethereum'
-    // 🔥 Other token names REMOVED!
-    // 🚫 DAI, USDC, WBTC not supported!
+    ETH: 'Ethereum',
+    USDC: 'USD Coin',
+    USDT: 'Tether USD',
+    DAI: 'Dai Stablecoin',
+    WBTC: 'Wrapped Bitcoin',
+    LINK: 'Chainlink',
+    UNI: 'Uniswap',
+    AAVE: 'Aave Token'
   }
   return names[symbol] || symbol
 }
