@@ -641,6 +641,32 @@ async function approveLend() {
 async function lend() {
   if (!canLend.value) return
   
+  // 🔐 确保钱包已连接
+  if (!walletStore.isConnected) {
+    notificationStore.error('Wallet Not Connected', 'Please connect your wallet first before lending')
+    return
+  }
+  
+  // 🔗 确保有有效的provider，signer将按需创建
+  if (!walletStore.provider) {
+    notificationStore.error('Provider Not Available', 'Wallet provider not available. Please reconnect your wallet.')
+    return
+  }
+  
+  // 🔧 获取有效的signer（如果直接signer不可用，使用安全方法创建）
+  let activeSigner = walletStore.signer
+  if (!activeSigner) {
+    try {
+      console.log('🔄 Signer not available, creating safe transaction signer...')
+      activeSigner = await walletStore.getSafeTransactionSigner()
+      console.log('✅ Safe transaction signer created successfully')
+    } catch (signerError) {
+      console.error('❌ Failed to create signer:', signerError)
+      notificationStore.error('Signer Creation Failed', 'Failed to create transaction signer. Please reconnect your wallet.')
+      return
+    }
+  }
+  
   isLending.value = true
   try {
     const token = lendForm.value.token
@@ -651,6 +677,15 @@ async function lend() {
     const promisedAPR = base + bonus
     
     console.log(`🚀 Starting REAL blockchain lend operation: ${amount} ${token}`)
+    
+    // 🔧 确保contracts manager使用正确的signer
+    try {
+      const { initializeContractManager } = await import('@/utils/contracts.js')
+      await initializeContractManager(walletStore.provider, activeSigner)
+      console.log('✅ Contract manager reinitialized with current signer')
+    } catch (contractInitError) {
+      console.warn('⚠️ Failed to reinitialize contract manager:', contractInitError)
+    }
     
     // Initialize contracts if not already done
     const { initializeContracts, depositToMixer } = await import('@/utils/contracts.js')
@@ -972,10 +1007,24 @@ async function withdraw() {
     return
   }
   
-  // 🔗 确保有有效的provider和signer
-  if (!walletStore.provider || !walletStore.signer) {
-    notificationStore.error('Provider Not Available', 'Wallet provider or signer not available. Please reconnect your wallet.')
+  // 🔗 确保有有效的provider，signer将按需创建
+  if (!walletStore.provider) {
+    notificationStore.error('Provider Not Available', 'Wallet provider not available. Please reconnect your wallet.')
     return
+  }
+  
+  // 🔧 获取有效的signer（如果直接signer不可用，使用安全方法创建）
+  let activeSigner = walletStore.signer
+  if (!activeSigner) {
+    try {
+      console.log('🔄 Signer not available, creating safe transaction signer...')
+      activeSigner = await walletStore.getSafeTransactionSigner()
+      console.log('✅ Safe transaction signer created successfully')
+    } catch (signerError) {
+      console.error('❌ Failed to create signer:', signerError)
+      notificationStore.error('Signer Creation Failed', 'Failed to create transaction signer. Please reconnect your wallet.')
+      return
+    }
   }
   
   isWithdrawing.value = true
@@ -1036,6 +1085,15 @@ async function withdraw() {
     // 🚀 执行真实的区块链withdraw交易
     console.log('🚀 Starting REAL blockchain withdraw operation:', amount, record.token)
     console.log('📡 Sending withdraw transaction to Sepolia testnet...')
+    
+    // 🔧 确保contracts manager使用正确的signer
+    try {
+      const { initializeContractManager } = await import('@/utils/contracts.js')
+      await initializeContractManager(walletStore.provider, activeSigner)
+      console.log('✅ Contract manager reinitialized with current signer')
+    } catch (contractInitError) {
+      console.warn('⚠️ Failed to reinitialize contract manager:', contractInitError)
+    }
     
     try {
       // 使用记录中存储的nullifier和secret
