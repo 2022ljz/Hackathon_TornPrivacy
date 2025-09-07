@@ -108,11 +108,6 @@
           💎 Lend to Sepolia
         </button>
       </div>
-
-      <p class="text-xs text-green-600 bg-green-50 p-2 rounded">
-        ✅ <strong>Real Blockchain Mode:</strong> All transactions will be sent to Sepolia testnet and appear on Etherscan.
-        Your Mixer contract: <code class="bg-white px-1 rounded">0xf85Daa3dBA126757027CE967F86Eb7860271AfE0</code>
-      </p>
     </div>
 
     <!-- Withdraw Tab -->

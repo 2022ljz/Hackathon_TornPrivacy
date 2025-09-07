@@ -68,23 +68,6 @@
             Stake
           </button>
         </div>
-        
-        <!-- Recovery section -->
-        <div class="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3">
-          <div class="text-blue-300 text-sm font-medium mb-2">🔄 Recover Previous Stake</div>
-          <div class="text-xs text-blue-200 mb-2">
-            If you have a previous stake transaction but lost the commitment note, click below to recover it:
-          </div>
-          <button 
-            @click="recoverCommitmentFromTx"
-            class="tornado-button-secondary text-xs px-3 py-1"
-          >
-            Recover My 0.02 ETH Stake
-          </button>
-          <div class="text-xs text-mixer-muted mt-1">
-            Tx: 0xec67bdf...0fd941f
-          </div>
-        </div>
       </div>
     </div>
 
@@ -734,51 +717,6 @@ function formatDate(timestamp) {
   } catch (e) {
     return 'Invalid date'
   }
-}
-
-// 手动恢复commitment的功能
-function recoverCommitmentFromTx() {
-  // 基于您的交易 0xec67bdfafa0c7e7566aaea9220211d736eda491e79e8e09a6c73d67510fd941f
-  // 我们可以从交易中提取commitment信息
-  const txHash = '0xec67bdfafa0c7e7566aaea9220211d736eda491e79e8e09a6c73d67510fd941f'
-  const amount = 0.02
-  const token = 'ETH'
-  const currentTime = now()
-  
-  // 基于交易哈希生成确定性的commitment (这是一个简化方法)
-  // 在真实实现中，应该从交易的logs中提取真实commitment
-  const commitment = '0x' + txHash.slice(2, 66) // 使用前64个字符作为commitment
-  
-  // 初始化 stakeNotes 如果不存在
-  if (!walletStore.localData.stakeNotes) {
-    walletStore.localData.stakeNotes = {}
-  }
-  
-  // 恢复stake记录
-  walletStore.localData.stakeNotes[commitment] = {
-    token,
-    amount,
-    stakeTime: currentTime,
-    timestamp: currentTime,
-    status: 'active',
-    borrows: {},
-    txHash: txHash,
-    recovered: true // 标记为恢复的记录
-  }
-  
-  walletStore.persistData()
-  
-  notificationStore.success(
-    'Commitment Recovered! 🔄',
-    'Successfully recovered commitment from transaction:\n\n' +
-    'Tx Hash: ' + txHash + '\n' +
-    'Amount: ' + amount + ' ' + token + '\n' +
-    'Commitment: ' + commitment + '\n\n' +
-    '✅ You can now use this commitment for borrowing and unstaking.',
-    10000
-  )
-  
-  return commitment
 }
 
 async function copyToClipboard(text) {
