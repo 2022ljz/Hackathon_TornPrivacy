@@ -318,9 +318,28 @@ import { useWalletStore } from '@/stores/wallet'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNumber, now } from '@/utils/helpers'
 import { depositToMixer, withdrawFromMixer } from '@/utils/contracts.js'
+import { ethers } from 'ethers'
 
 const walletStore = useWalletStore()
 const notificationStore = useNotificationStore()
+
+// 🔍 Debug: Verify handleWithdrawOperation is removed
+if (walletStore.handleWithdrawOperation) {
+  console.error('❌ CRITICAL: handleWithdrawOperation still exists in walletStore!')
+  console.error('   This should have been removed. Please check wallet.js')
+} else {
+  console.log('✅ Confirmed: handleWithdrawOperation has been properly removed')
+}
+
+// 🛡️ Add safeguard to prevent accidental calls to removed function
+Object.defineProperty(walletStore, 'handleWithdrawOperation', {
+  get() {
+    console.error('🚫 BLOCKED: Attempt to call removed handleWithdrawOperation function!')
+    console.error('   This function has been removed and replaced with real blockchain operations.')
+    throw new Error('handleWithdrawOperation function has been removed. Please clear browser cache and refresh.')
+  },
+  configurable: false
+})
 
 // State
 const activeTab = ref('lend')
@@ -485,6 +504,40 @@ const canWithdraw = computed(() => {
 })
 
 // Methods
+
+// 🧹 Cache cleanup function
+function clearBrowserCache() {
+  console.log('🧹 Clearing browser cache and storage...')
+  
+  try {
+    // Clear localStorage
+    localStorage.clear()
+    console.log('✅ localStorage cleared')
+    
+    // Clear sessionStorage
+    sessionStorage.clear()
+    console.log('✅ sessionStorage cleared')
+    
+    notificationStore.success(
+      'Cache Cleared',
+      'Browser cache has been cleared. The page will refresh in 2 seconds.',
+      3000
+    )
+    
+    // Force reload after 2 seconds
+    setTimeout(() => {
+      window.location.reload(true)
+    }, 2000)
+    
+  } catch (error) {
+    console.error('❌ Failed to clear cache:', error)
+    notificationStore.error(
+      'Cache Clear Failed',
+      'Please manually clear your browser cache (Ctrl+Shift+Delete) and refresh the page.'
+    )
+  }
+}
+
 function generateTransactionNote() {
   // Generate 32-bit random hash as transaction proof
   const chars = '0123456789abcdef'
@@ -918,6 +971,18 @@ async function confirmWithdraw() {
 async function withdraw() {
   if (!canWithdraw.value) return
   
+  // 🔐 确保钱包已连接
+  if (!walletStore.isConnected) {
+    notificationStore.error('Wallet Not Connected', 'Please connect your wallet first before withdrawing')
+    return
+  }
+  
+  // 🔗 确保有有效的provider和signer
+  if (!walletStore.provider || !walletStore.signer) {
+    notificationStore.error('Provider Not Available', 'Wallet provider or signer not available. Please reconnect your wallet.')
+    return
+  }
+  
   isWithdrawing.value = true
   try {
     const note = withdrawForm.value.note
@@ -992,6 +1057,32 @@ async function withdraw() {
       console.log('   Secret:', secret)
       console.log('   To Address:', toAddress)
       
+      // 🔍 Additional validation and debugging
+      if (!nullifier || !nullifier.startsWith('0x') || nullifier.length !== 66) {
+        throw new Error(`Invalid nullifier format: ${nullifier}. Expected 66-character hex string starting with 0x`)
+      }
+      
+      if (!secret || !secret.startsWith('0x') || secret.length !== 66) {
+        throw new Error(`Invalid secret format: ${secret}. Expected 66-character hex string starting with 0x`)
+      }
+      
+      if (!toAddress || !toAddress.startsWith('0x') || toAddress.length !== 42) {
+        throw new Error(`Invalid address format: ${toAddress}. Expected 42-character hex string starting with 0x`)
+      }
+      
+      console.log('✅ All parameters passed format validation')
+      
+      // 🧪 Calculate commitment for verification
+      try {
+        const calculatedCommitment = ethers.keccak256(
+          ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'bytes32'], [nullifier, secret])
+        )
+        console.log('🔍 Calculated commitment from nullifier+secret:', calculatedCommitment)
+        console.log('   Note: This should match the commitment from your original deposit')
+      } catch (err) {
+        console.warn('⚠️ Could not calculate commitment:', err)
+      }
+      
       const result = await withdrawFromMixer(nullifier, secret, toAddress)
       
       console.log('✅ Withdraw blockchain transaction successful!')
@@ -1024,15 +1115,26 @@ async function withdraw() {
     
     walletStore.persistData()
     
-    // 更新本地余额 - Withdraw操作增加可用余额（取回本金 + 利息）
-    const totalWithdrawAmount = amount + withdrawInterest
-    walletStore.handleWithdrawOperation(record.token, totalWithdrawAmount)
+    // 🔥 NO MORE LOCAL BALANCE OPERATIONS!
+    // 🚫 handleWithdrawOperation() was removed - only real blockchain!
+    // 💰 Real balance will be updated from blockchain query automatically
     
     await updateBalance()
     
+    // 🔄 添加延迟刷新机制确保区块链数据已更新
+    setTimeout(async () => {
+      console.log('🔄 Refreshing balance after withdraw transaction...')
+      try {
+        await updateBalance()
+        console.log('✅ Balance refreshed successfully')
+      } catch (refreshError) {
+        console.warn('⚠️ Balance refresh failed:', refreshError)
+      }
+    }, 10000) // 10秒后再次刷新
+    
     notificationStore.success(
       'Withdraw Successful',
-      `Successfully transferred:\n• ${amount} ${record.token} (principal)\n• ${formatNumber(withdrawInterest, 6)} ${record.token} (interest)\n\nTo wallet: ${withdrawForm.value.address}\n\nRate used: ${rateType} (${aprUsed}%)\nTime elapsed: ${formatNumber(days, 2)} days\nWithdraw ratio: ${formatNumber(withdrawRatio * 100, 2)}%`
+      `Successfully transferred:\n• ${amount} ${record.token} (principal)\n• ${formatNumber(withdrawInterest, 6)} ${record.token} (interest)\n\nTo wallet: ${withdrawForm.value.address}\n\nRate used: ${rateType} (${aprUsed}%)\nTime elapsed: ${formatNumber(days, 2)} days\nWithdraw ratio: ${formatNumber(withdrawRatio * 100, 2)}%\n\n💡 Balance will auto-refresh in 10 seconds`
     )
     
     // Reset form
@@ -1041,7 +1143,20 @@ async function withdraw() {
     withdrawForm.value.address = ''
     
   } catch (error) {
-    notificationStore.error('Withdraw Failed', error.message)
+    console.error('❌ Withdraw error details:', error)
+    
+    // Check if the error is related to the removed function
+    if (error.message && error.message.includes('handleWithdrawOperation')) {
+      console.error('🔧 DETECTED: Error calling removed handleWithdrawOperation function!')
+      console.error('   This suggests browser cache issues. Please clear browser cache and refresh.')
+      
+      notificationStore.error(
+        'Cache Error Detected',
+        'The browser is using an outdated version of the code. Please:\n\n1. Clear browser cache (Ctrl+Shift+Delete)\n2. Hard refresh (Ctrl+F5 or Cmd+Shift+R)\n3. Restart browser if needed\n\nThe withdrawal transaction was still processed successfully on the blockchain.'
+      )
+    } else {
+      notificationStore.error('Withdraw Failed', error.message)
+    }
   } finally {
     isWithdrawing.value = false
   }

@@ -139,6 +139,11 @@ export class ContractService {
                 hex = hex.slice(2)
             }
 
+            // 验证是否为有效的十六进制字符
+            if (!/^[0-9a-fA-F]*$/.test(hex)) {
+                throw new Error(`Invalid hex string: ${value}`)
+            }
+
             // 确保是64个字符（32字节）
             if (hex.length < 64) {
                 // 左填充0
@@ -150,10 +155,16 @@ export class ContractService {
 
             const result = '0x' + hex
             console.log(`🔧 Formatted bytes32: ${value} -> ${result}`)
+
+            // 最终验证
+            if (result.length !== 66) {
+                throw new Error(`Invalid bytes32 format after processing: ${result} (length: ${result.length})`)
+            }
+
             return result
         } catch (error) {
-            console.warn('⚠️ Bytes32 formatting failed, using original:', error)
-            return value.toString()
+            console.error('⚠️ Bytes32 formatting failed:', error)
+            throw new Error(`Failed to format bytes32 parameter: ${error.message}`)
         }
     }
 
@@ -366,6 +377,11 @@ export class ContractService {
     // 从混币器提取
     async withdraw(to, nullifier, secret) {
         try {
+            // 🔧 Parameter validation
+            if (!to || typeof to !== 'string' || !to.startsWith('0x') || to.length !== 42) {
+                throw new Error(`Invalid to address: ${to}. Must be a valid Ethereum address`)
+            }
+
             // 检查signer是否可用，如果不行就使用window.ethereum
             if (!this.signer || typeof this.signer.sendTransaction !== 'function') {
                 console.log('🔄 Withdraw signer verification failed, using window.ethereum method...')
@@ -376,6 +392,22 @@ export class ContractService {
             const formattedNullifier = this.formatBytes32(nullifier)
             const formattedSecret = this.formatBytes32(secret)
 
+            console.log('🔧 Formatted parameters for contract call:')
+            console.log('   To:', to)
+            console.log('   Nullifier:', formattedNullifier)
+            console.log('   Secret:', formattedSecret)
+
+            // 🔍 Test contract call before sending transaction
+            try {
+                console.log('🧪 Testing contract call with static call...')
+                await this.contracts.mixer.withdraw.staticCall(to, formattedNullifier, formattedSecret)
+                console.log('✅ Static call successful, parameters are valid')
+            } catch (staticError) {
+                console.error('❌ Static call failed:', staticError)
+                throw new Error(`Contract validation failed: ${staticError.message}. This suggests the parameters are invalid or the withdrawal conditions are not met.`)
+            }
+
+            console.log('📡 Sending actual transaction...')
             const tx = await this.contracts.mixer.withdraw(to, formattedNullifier, formattedSecret)
             console.log('Withdraw transaction sent:', tx.hash)
 
@@ -480,6 +512,16 @@ export class ContractService {
     // 锁定抵押品并借贷
     async lockAndBorrow(commitment, borrowToken, borrowAmount) {
         try {
+            // 🔧 参数验证
+            if (!commitment || typeof commitment !== 'string' || !commitment.startsWith('0x') || commitment.length !== 66) {
+                throw new Error(`Invalid commitment format: ${commitment}. Must be 66-character hex string starting with 0x`)
+            }
+
+            console.log('🔍 Borrow Parameters:')
+            console.log('   Commitment:', commitment)
+            console.log('   Borrow Token:', borrowToken)
+            console.log('   Borrow Amount:', borrowAmount)
+
             // 检查signer是否可用，如果不行就使用window.ethereum
             if (!this.signer || typeof this.signer.sendTransaction !== 'function') {
                 console.log('🔄 Lock and borrow signer verification failed, using window.ethereum method...')
@@ -487,7 +529,10 @@ export class ContractService {
             }
 
             const borrowTokenData = contractsConfig.TOKENS[borrowToken]
-            if (!borrowTokenData) throw new Error(`Borrow token ${borrowToken} not found`)
+            if (!borrowTokenData) {
+                console.error('❌ Available tokens:', Object.keys(contractsConfig.TOKENS))
+                throw new Error(`Borrow token ${borrowToken} not found. Available tokens: ${Object.keys(contractsConfig.TOKENS).join(', ')}`)
+            }
 
             // 🔧 修复：清理小数位数
             const sanitizedBorrowAmount = this.sanitizeDecimalAmount(borrowAmount, borrowTokenData.decimals)
@@ -495,6 +540,90 @@ export class ContractService {
                 sanitizedBorrowAmount.toString(),
                 borrowTokenData.decimals
             )
+
+            console.log('🔧 Formatted borrow parameters:')
+            console.log('   Token Address:', borrowTokenData.address)
+            console.log('   Amount (original):', borrowAmount)
+            console.log('   Amount (sanitized):', sanitizedBorrowAmount)
+            console.log('   Amount (wei):', borrowAmountWei.toString())
+
+            // 🔍 CRITICAL: 验证commitment是否在区块链上存在
+            try {
+                console.log('🔍 验证commitment是否存在于区块链...')
+                const depositInfo = await this.contracts.mixer.getDeposit(commitment)
+                const [token, amount, withdrawn, locked] = depositInfo
+
+                console.log('📋 区块链存款信息:')
+                console.log('   Token:', token)
+                console.log('   Amount:', amount.toString())
+                console.log('   Withdrawn:', withdrawn)
+                console.log('   Locked:', locked)
+
+                if (amount.toString() === '0') {
+                    throw new Error(`Commitment ${commitment} 不存在于区块链上。这意味着：\n1. 质押交易可能失败了\n2. Commitment计算错误\n3. 使用了错误的note\n\n请检查您的质押交易是否成功，并确保使用正确的commitment。`)
+                }
+
+                if (withdrawn) {
+                    throw new Error(`Commitment ${commitment} 的资金已被提取，无法用于抵押借款。`)
+                }
+
+                if (locked) {
+                    throw new Error(`Commitment ${commitment} 已被锁定用于其他借款，无法重复使用。`)
+                }
+
+                console.log('✅ Commitment区块链验证通过')
+
+            } catch (verifyError) {
+                console.error('❌ Commitment区块链验证失败:', verifyError)
+                throw new Error(`区块链验证失败: ${verifyError.message}`)
+            }
+
+            // 🔍 CRITICAL: 验证LendingPool流动性
+            try {
+                console.log('🔍 检查LendingPool流动性...')
+
+                // 获取LendingPool合约中该代币的余额
+                let poolBalance
+                if (borrowTokenData.address === "0x0000000000000000000000000000000000000000" || borrowTokenData.address === ethers.ZeroAddress) {
+                    // ETH余额
+                    poolBalance = await this.provider.getBalance(this.contracts.lendingPool.target || this.contracts.lendingPool.address)
+                } else {
+                    // ERC20代币余额
+                    const tokenContract = new ethers.Contract(borrowTokenData.address, [
+                        'function balanceOf(address) view returns (uint256)'
+                    ], this.provider)
+                    poolBalance = await tokenContract.balanceOf(this.contracts.lendingPool.target || this.contracts.lendingPool.address)
+                }
+
+                console.log('💰 流动性检查:')
+                console.log('   Pool Balance:', ethers.formatUnits(poolBalance, borrowTokenData.decimals), borrowToken)
+                console.log('   Requested Amount:', ethers.formatUnits(borrowAmountWei, borrowTokenData.decimals), borrowToken)
+                console.log('   Sufficient?', poolBalance >= borrowAmountWei ? '✅ Yes' : '❌ No')
+
+                if (poolBalance < borrowAmountWei) {
+                    throw new Error(`LendingPool流动性不足！\n\n可用余额: ${ethers.formatUnits(poolBalance, borrowTokenData.decimals)} ${borrowToken}\n请求金额: ${ethers.formatUnits(borrowAmountWei, borrowTokenData.decimals)} ${borrowToken}\n\n请减少借款金额或等待其他用户补充流动性。`)
+                }
+
+                console.log('✅ 流动性验证通过')
+
+            } catch (liquidityError) {
+                console.error('❌ 流动性验证失败:', liquidityError)
+                throw new Error(`流动性检查失败: ${liquidityError.message}`)
+            }
+
+            // 🧪 先进行静态调用测试
+            try {
+                console.log('🧪 Testing lockAndBorrow with static call...')
+                await this.contracts.collateralManager.lockAndBorrow.staticCall(
+                    commitment,
+                    borrowTokenData.address === "0x0000000000000000000000000000000000000000" ? ethers.ZeroAddress : borrowTokenData.address,
+                    borrowAmountWei
+                )
+                console.log('✅ Static call successful, parameters are valid')
+            } catch (staticError) {
+                console.error('❌ Static call failed:', staticError)
+                throw new Error(`Contract validation failed: ${staticError.message}. This suggests the commitment is invalid, already locked, or insufficient collateral.`)
+            }
 
             // 🔧 添加gas估算和优化
             let gasEstimate
@@ -847,7 +976,9 @@ export async function depositToMixer(token, amount, note = null) {
         }
 
         // Generate commitment using the same method as the contract
-        const commitment = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'bytes32'], [nullifier, secret]))
+        // 🚨 CRITICAL FIX: 使用abi.encodePacked()等效方式
+        // 智能合约使用: keccak256(abi.encodePacked(nullifier, secret))
+        const commitment = ethers.keccak256(ethers.concat([nullifier, secret]))
 
         console.log('🔐 Generated cryptographic proof:')
         console.log('   Nullifier:', nullifier)
@@ -886,17 +1017,58 @@ export async function depositToMixer(token, amount, note = null) {
 export async function withdrawFromMixer(nullifier, secret, to) {
     console.log(`🔗 Starting real blockchain withdrawal`)
 
+    // 🔧 Parameter validation
+    if (!to || typeof to !== 'string' || !to.startsWith('0x') || to.length !== 42) {
+        throw new Error(`Invalid to address: ${to}. Must be a valid Ethereum address (0x + 40 hex chars)`)
+    }
+
+    if (!nullifier || typeof nullifier !== 'string') {
+        throw new Error(`Invalid nullifier: ${nullifier}. Must be a valid bytes32 string`)
+    }
+
+    if (!secret || typeof secret !== 'string') {
+        throw new Error(`Invalid secret: ${secret}. Must be a valid bytes32 string`)
+    }
+
+    // 🔧 Format parameters to ensure proper bytes32 format
+    const formattedNullifier = nullifier.startsWith('0x') ? nullifier : '0x' + nullifier
+    const formattedSecret = secret.startsWith('0x') ? secret : '0x' + secret
+
+    if (formattedNullifier.length !== 66) {
+        throw new Error(`Invalid nullifier length: ${formattedNullifier.length}/66. Must be 66 characters (0x + 64 hex chars)`)
+    }
+
+    if (formattedSecret.length !== 66) {
+        throw new Error(`Invalid secret length: ${formattedSecret.length}/66. Must be 66 characters (0x + 64 hex chars)`)
+    }
+
+    console.log('✅ Parameter validation passed')
+    console.log('   To:', to)
+    console.log('   Nullifier:', formattedNullifier)
+    console.log('   Secret:', formattedSecret)
+
+    // 🔍 Calculate and verify commitment
+    try {
+        const calculatedCommitment = ethers.keccak256(
+            ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'bytes32'], [formattedNullifier, formattedSecret])
+        )
+        console.log('🔍 Calculated commitment:', calculatedCommitment)
+        console.log('   This should match the commitment used during deposit')
+    } catch (commitmentError) {
+        console.warn('⚠️ Could not calculate commitment for verification:', commitmentError)
+    }
+
     if (!contractManager) {
         throw new Error('Contract manager not initialized. Please connect wallet first.')
     }
 
     try {
         console.log('🔐 Using provided cryptographic proof:')
-        console.log('   Nullifier:', nullifier)
-        console.log('   Secret:', secret)
+        console.log('   Nullifier:', formattedNullifier)
+        console.log('   Secret:', formattedSecret)
         console.log('   To Address:', to)
 
-        const receipt = await contractManager.withdraw(to, nullifier, secret)
+        const receipt = await contractManager.withdraw(to, formattedNullifier, formattedSecret)
 
         console.log(`✅ Withdrawal successful!`)
         console.log(`   Transaction Hash: ${receipt.transactionHash || receipt.hash}`)
@@ -918,27 +1090,93 @@ export async function withdrawFromMixer(nullifier, secret, to) {
 // Debug function to check contract and signer status
 export function debugContractStatus() {
     console.log('🔍 Contract Manager Debug Status:')
-    console.log('Contract Manager exists:', !!contractManager)
+    console.log('   Manager initialized:', !!contractManager)
 
     if (contractManager) {
-        console.log('Has provider:', !!contractManager.provider)
-        console.log('Has signer:', !!contractManager.signer)
-        console.log('Is initialized:', !!contractManager.initialized)
-        console.log('Contracts available:', Object.keys(contractManager.contracts))
+        console.log('   Provider:', !!contractManager.provider)
+        console.log('   Signer:', !!contractManager.signer)
+        console.log('   Contracts initialized:', !!contractManager.initialized)
 
-        if (contractManager.signer) {
-            contractManager.signer.getAddress().then(address => {
-                console.log('Signer address:', address)
-            }).catch(err => {
-                console.log('Signer address error:', err.message)
-            })
+        if (contractManager.contracts) {
+            console.log('   Available contracts:')
+            console.log('     - Mixer:', !!contractManager.contracts.mixer, contractsConfig.MIXER_ADDRESS)
+            console.log('     - LendingPool:', !!contractManager.contracts.lendingPool, contractsConfig.LENDING_POOL_ADDRESS)
+            console.log('     - CollateralManager:', !!contractManager.contracts.collateralManager, contractsConfig.COLLATERAL_MANAGER_ADDRESS)
+        }
+    }
+
+    console.log('🔧 Contract Configurations:')
+    console.log('   Chain ID:', contractsConfig.CHAIN_ID)
+    console.log('   Available tokens:', Object.keys(contractsConfig.TOKENS))
+    console.log('   Contract addresses:')
+    console.log('     - Mixer:', contractsConfig.MIXER_ADDRESS)
+    console.log('     - LendingPool:', contractsConfig.LENDING_POOL_ADDRESS)
+    console.log('     - CollateralManager:', contractsConfig.COLLATERAL_MANAGER_ADDRESS)
+}
+
+// Test function to verify contract deployment
+export async function testContractDeployment() {
+    console.log('🧪 Testing contract deployment...')
+
+    if (!contractManager || !contractManager.provider) {
+        throw new Error('Contract manager or provider not available')
+    }
+
+    try {
+        // Test each contract
+        const mixer = contractManager.contracts?.mixer
+        const lendingPool = contractManager.contracts?.lendingPool
+        const collateralManager = contractManager.contracts?.collateralManager
+
+        if (!mixer || !lendingPool || !collateralManager) {
+            throw new Error('One or more contracts not initialized')
         }
 
-        // Check if mixer contract has runner
-        if (contractManager.contracts.mixer) {
-            console.log('Mixer contract has runner:', !!contractManager.contracts.mixer.runner)
-            console.log('Mixer contract address:', contractManager.contracts.mixer.target)
+        // Test contract calls
+        console.log('🔍 Testing contract calls...')
+
+        // Test Mixer
+        try {
+            const mixerCode = await contractManager.provider.getCode(contractsConfig.MIXER_ADDRESS)
+            console.log('   Mixer contract code length:', mixerCode.length)
+            if (mixerCode === '0x') {
+                throw new Error('Mixer contract not deployed at ' + contractsConfig.MIXER_ADDRESS)
+            }
+        } catch (error) {
+            console.error('   ❌ Mixer test failed:', error)
+            throw error
         }
+
+        // Test CollateralManager
+        try {
+            const cmCode = await contractManager.provider.getCode(contractsConfig.COLLATERAL_MANAGER_ADDRESS)
+            console.log('   CollateralManager contract code length:', cmCode.length)
+            if (cmCode === '0x') {
+                throw new Error('CollateralManager contract not deployed at ' + contractsConfig.COLLATERAL_MANAGER_ADDRESS)
+            }
+        } catch (error) {
+            console.error('   ❌ CollateralManager test failed:', error)
+            throw error
+        }
+
+        // Test LendingPool
+        try {
+            const lpCode = await contractManager.provider.getCode(contractsConfig.LENDING_POOL_ADDRESS)
+            console.log('   LendingPool contract code length:', lpCode.length)
+            if (lpCode === '0x') {
+                throw new Error('LendingPool contract not deployed at ' + contractsConfig.LENDING_POOL_ADDRESS)
+            }
+        } catch (error) {
+            console.error('   ❌ LendingPool test failed:', error)
+            throw error
+        }
+
+        console.log('✅ All contracts are properly deployed')
+        return true
+
+    } catch (error) {
+        console.error('❌ Contract deployment test failed:', error)
+        throw error
     }
 }
 
@@ -1094,8 +1332,37 @@ export async function stakeAndBorrow(collateralToken, collateralAmount, borrowTo
 export async function borrowAgainstStake(commitment, borrowToken, borrowAmount) {
     console.log(`🔗 Starting blockchain borrow: ${borrowAmount} ${borrowToken} against stake ${commitment}`)
 
+    // 🔧 参数验证
+    if (!commitment || typeof commitment !== 'string' || !commitment.startsWith('0x') || commitment.length !== 66) {
+        throw new Error(`Invalid commitment: ${commitment}. Must be a valid 66-character hex string starting with 0x`)
+    }
+
+    if (!borrowToken || typeof borrowToken !== 'string') {
+        throw new Error(`Invalid borrow token: ${borrowToken}. Must be a valid token symbol`)
+    }
+
+    if (!borrowAmount || borrowAmount <= 0) {
+        throw new Error(`Invalid borrow amount: ${borrowAmount}. Must be greater than 0`)
+    }
+
+    // 检查代币是否支持
+    const tokenConfig = contractsConfig.TOKENS[borrowToken]
+    if (!tokenConfig) {
+        throw new Error(`Token ${borrowToken} is not supported. Available tokens: ${Object.keys(contractsConfig.TOKENS).join(', ')}`)
+    }
+
+    console.log('✅ Parameter validation passed')
+    console.log('   Commitment:', commitment)
+    console.log('   Borrow Token:', borrowToken, '(', tokenConfig.address, ')')
+    console.log('   Borrow Amount:', borrowAmount)
+
     if (!contractManager) {
         throw new Error('Contract manager not initialized. Please call connectWallet() first.')
+    }
+
+    // 🔍 验证合约是否已初始化
+    if (!contractManager.contracts?.collateralManager) {
+        throw new Error('CollateralManager contract not initialized. Please ensure wallet is connected and contracts are deployed.')
     }
 
     try {

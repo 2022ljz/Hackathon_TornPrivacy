@@ -405,9 +405,27 @@ import { ref, computed, watch } from 'vue'
 import { useWalletStore } from '@/stores/wallet'
 import { useNotificationStore } from '@/stores/notifications'
 import { formatNumber, now } from '@/utils/helpers'
+import { debugContractStatus, testContractDeployment } from '@/utils/contracts.js'
+import { ethers } from 'ethers'
 
 const walletStore = useWalletStore()
 const notificationStore = useNotificationStore()
+
+// 🔍 Debug: Make debug functions available globally for console access
+if (typeof window !== 'undefined') {
+  window.debugContractStatus = debugContractStatus
+  window.testContractDeployment = testContractDeployment
+  
+  // Also run a quick status check on component load
+  console.log('🔧 StakeBorrowPanel loaded, running contract status check...')
+  setTimeout(() => {
+    try {
+      debugContractStatus()
+    } catch (error) {
+      console.warn('⚠️ Could not run contract status check:', error)
+    }
+  }, 1000)
+}
 
 // State
 const activeTab = ref('stake')
@@ -1022,29 +1040,83 @@ async function borrow() {
   
   isBorrowing.value = true
   try {
-    const commitment = borrowForm.value.note
+    const userNote = borrowForm.value.note  // 用户输入的可能是transaction note
     const token = borrowForm.value.token
     const amount = Number(borrowForm.value.amount)
     const toAddress = borrowForm.value.toAddress
     
-    console.log(`🚀 Starting real blockchain borrow: ${amount} ${token} against commitment ${commitment}`)
+    console.log(`🚀 Starting real blockchain borrow: ${amount} ${token} against note ${userNote}`)
     
-    // 验证commitment存在于本地记录中
-    if (!walletStore.localData.stakeNotes || !walletStore.localData.stakeNotes[commitment]) {
-      notificationStore.error('Invalid Commitment', 'Stake commitment not found. Please ensure you have a valid stake first.')
+    // 🔍 智能查找正确的commitment
+    let actualCommitment = null
+    let stakeRecord = null
+    
+    // 第1步：检查用户输入是否直接是commitment
+    if (walletStore.localData.stakeNotes && walletStore.localData.stakeNotes[userNote]) {
+      actualCommitment = userNote
+      stakeRecord = walletStore.localData.stakeNotes[userNote]
+      console.log('✅ 直接使用输入的commitment:', actualCommitment)
+    }
+    // 第2步：检查是否是transaction note，需要转换为commitment
+    else if (walletStore.localData.notes && walletStore.localData.notes[userNote]) {
+      // 从lend notes中获取nullifier和secret，计算commitment
+      const lendRecord = walletStore.localData.notes[userNote]
+      if (lendRecord.nullifier && lendRecord.secret) {
+        // 🚨 CRITICAL FIX: 使用abi.encodePacked()等效方式，而不是abi.encode()
+        // 智能合约使用: keccak256(abi.encodePacked(nullifier, secret))
+        // 前端等效: keccak256(concat(nullifier, secret))
+        actualCommitment = ethers.keccak256(
+          ethers.concat([lendRecord.nullifier, lendRecord.secret])
+        )
+        console.log('🔄 从transaction note计算commitment (使用encodePacked方式):', userNote, '->', actualCommitment)
+        
+        // 检查计算出的commitment是否在stakeNotes中
+        if (walletStore.localData.stakeNotes && walletStore.localData.stakeNotes[actualCommitment]) {
+          stakeRecord = walletStore.localData.stakeNotes[actualCommitment]
+        }
+      }
+    }
+    // 第3步：尝试在所有stakeNotes中查找匹配的记录
+    else if (walletStore.localData.stakeNotes) {
+      for (const [commitment, record] of Object.entries(walletStore.localData.stakeNotes)) {
+        // 检查是否有相关的transaction hash或其他标识符匹配
+        if (record.txHash === userNote || 
+            (record.nullifier && record.secret && 
+             ethers.keccak256(ethers.concat([record.nullifier, record.secret])) === userNote)) {
+          actualCommitment = commitment
+          stakeRecord = record
+          console.log('🔍 通过记录匹配找到commitment:', actualCommitment)
+          break
+        }
+      }
+    }
+    
+    if (!actualCommitment || !stakeRecord) {
+      console.error('❌ 无法找到有效的stake记录')
+      console.log('可用的stake notes:', Object.keys(walletStore.localData.stakeNotes || {}))
+      console.log('可用的lend notes:', Object.keys(walletStore.localData.notes || {}))
+      
+      notificationStore.error(
+        'Invalid Stake Note', 
+        `无法找到对应的质押记录。\n\n输入的note: ${userNote}\n\n请确保：\n1. 您已完成质押操作\n2. 输入的是正确的stake commitment\n3. 或者输入的是对应的transaction note\n\n如果您有质押交易哈希，请查看交易详情获取正确的commitment。`
+      )
       return
     }
+    
+    console.log('✅ 找到有效的stake记录:')
+    console.log('   Commitment:', actualCommitment)
+    console.log('   Amount:', stakeRecord.amount, stakeRecord.token)
+    console.log('   Status:', stakeRecord.status)
     
     // 导入真实的区块链借款函数
     const { borrowAgainstStake } = await import('@/utils/contracts.js')
     
-    // 执行真实的区块链借款操作
-    const result = await borrowAgainstStake(commitment, token, amount)
+    // 执行真实的区块链借款操作 - 使用实际的commitment
+    const result = await borrowAgainstStake(actualCommitment, token, amount)
     
     console.log('✅ Blockchain borrow successful:', result)
     
-    // 更新本地commitment记录中的借款信息
-    const stakeRecord = walletStore.localData.stakeNotes[commitment]
+    // 更新本地commitment记录中的借款信息 - 使用actualCommitment
     if (!stakeRecord.borrows) {
       stakeRecord.borrows = {}
     }
